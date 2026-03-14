@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Runtime data (never commit)
+data/
+*.wav
+config.json
+
+# Environment files (never commit — keys go in Portainer env vars)
+.env
+.env.*
+
+# IDE
+.vscode/
+*.code-workspace
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

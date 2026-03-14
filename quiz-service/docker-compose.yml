@@ -1,0 +1,26 @@
+services:
+  quiz-service:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - quiz-data:/data
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - QUIZ_CONFIG_PATH=/data/config.json
+      - QUIZ_AUDIO_DIR=/data/audio
+    depends_on:
+      - piper
+    restart: unless-stopped
+
+  piper:
+    image: rhasspy/wyoming-piper
+    volumes:
+      - piper-data:/data
+    command: --voice en_US-lessac-medium --uri tcp://0.0.0.0:10300
+    restart: unless-stopped
+
+volumes:
+  quiz-data:
+  piper-data:

@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuizMaster Configuration</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-deep: #0a0e14;
+  --bg-panel: #111820;
+  --bg-panel-alt: #151d28;
+  --bg-hover: #1a2332;
+  --bg-input: #0d1219;
+  --border: #1e2a3a;
+  --border-bright: #2a3a4e;
+  --text-primary: #d4dce8;
+  --text-secondary: #7a8a9e;
+  --text-dim: #4a5568;
+  --green: #22c55e;
+  --green-dim: #166534;
+  --green-glow: rgba(34, 197, 94, 0.15);
+  --yellow: #eab308;
+  --yellow-dim: #854d0e;
+  --yellow-glow: rgba(234, 179, 8, 0.15);
+  --red: #ef4444;
+  --red-dim: #991b1b;
+  --red-glow: rgba(239, 68, 68, 0.15);
+  --blue: #3b82f6;
+  --cyan: #06b6d4;
+  --accent: #22c55e;
+  --panel-radius: 6px;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+}
+
+html { font-size: 14px; }
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+}
+
+/* ─── HEADER ─── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.header-logo {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green), 0 0 20px rgba(34,197,94,0.3);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.header h1 {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+}
+
+.header h1 span { color: var(--accent); }
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-link {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.nav-link:hover {
+  color: var(--text-secondary);
+  border-color: var(--border-bright);
+}
+
+/* ─── BUTTONS ─── */
+.btn {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 7px 16px;
+  border: 1px solid var(--border-bright);
+  border-radius: 4px;
+  background: var(--bg-panel-alt);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.3px;
+}
+
+.btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-dim);
+  color: var(--text-primary);
+}
+
+.btn:active { transform: scale(0.97); }
+
+.btn.primary {
+  border-color: var(--green-dim);
+  color: var(--green);
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.btn.primary:hover {
+  background: var(--green-glow);
+  border-color: var(--green);
+}
+
+.btn.danger {
+  border-color: var(--red-dim);
+  color: var(--red);
+}
+
+.btn.danger:hover {
+  background: var(--red-glow);
+  border-color: var(--red);
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn .icon { margin-right: 5px; font-size: 0.8rem; }
+
+/* ─── LAYOUT ─── */
+.config-wrap {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 24px 24px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ─── BANNER ─── */
+.banner {
+  padding: 10px 16px;
+  border-radius: var(--panel-radius);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  animation: banner-in 0.3s ease-out;
+}
+
+.banner.success {
+  background: var(--green-glow);
+  border: 1px solid var(--green-dim);
+  color: var(--green);
+  display: flex;
+}
+
+.banner.error {
+  background: var(--red-glow);
+  border: 1px solid var(--red-dim);
+  color: var(--red);
+  display: flex;
+}
+
+@keyframes banner-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── PANELS ─── */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--panel-radius);
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel-alt);
+}
+
+.panel-title {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-secondary);
+}
+
+.panel-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ─── FORM FIELDS ─── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.field label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+.field .hint {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+input[type="text"],
+input[type="number"],
+select,
+textarea {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: 8px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  width: 100%;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.1);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-dim);
+}
+
+select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%234a5568' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+
+textarea {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.input-with-suffix {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.input-with-suffix input {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+}
+
+.input-suffix {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 8px 12px;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.input-with-status {
+  position: relative;
+}
+
+.input-with-status input { padding-right: 90px; }
+
+.input-status {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.input-status.set { color: var(--green); }
+.input-status.not-set { color: var(--red); }
+
+/* ─── RADIO GROUP ─── */
+.radio-group {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  width: fit-content;
+}
+
+.radio-group label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 7px 18px;
+  cursor: pointer;
+  color: var(--text-dim);
+  background: var(--bg-input);
+  border-right: 1px solid var(--border);
+  transition: all 0.2s;
+  letter-spacing: 0.3px;
+  user-select: none;
+}
+
+.radio-group label:last-child { border-right: none; }
+.radio-group label:hover { color: var(--text-secondary); background: var(--bg-panel-alt); }
+
+.radio-group input { display: none; }
+
+.radio-group input:checked + label,
+.radio-group label.active {
+  background: var(--green-glow);
+  color: var(--green);
+  border-color: var(--green-dim);
+}
+
+/* ─── CATEGORY CHIPS ─── */
+.chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.chip {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 5px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: chip-in 0.2s ease-out;
+  transition: all 0.2s;
+}
+
+.chip:hover { border-color: var(--border-bright); }
+
+@keyframes chip-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.chip .remove {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.chip .remove:hover {
+  background: var(--red-glow);
+  color: var(--red);
+}
+
+.add-chip {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px dashed var(--border-bright);
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-chip:hover {
+  border-color: var(--green);
+  color: var(--green);
+  border-style: solid;
+}
+
+.add-chip-input {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 4px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--green);
+  border-radius: 4px;
+  color: var(--text-primary);
+  outline: none;
+  width: 120px;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.1);
+}
+
+/* ─── PROMPT ACTIONS ─── */
+.prompt-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.placeholder-note {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  padding: 6px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.placeholder-note code {
+  color: var(--cyan);
+  font-size: 0.65rem;
+}
+
+/* ─── TEST RESULT ─── */
+.test-result {
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--cyan);
+  border-radius: 4px;
+  display: none;
+  animation: result-in 0.3s ease-out;
+}
+
+.test-result.visible { display: block; }
+.test-result.error { border-left-color: var(--red); }
+
+@keyframes result-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.test-result-header {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.test-result-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 2px 6px;
+}
+
+.test-result-close:hover { color: var(--text-secondary); }
+
+.test-result-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.test-qa {
+  padding: 10px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.test-qa h4 {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.test-qa.question h4 { color: var(--cyan); }
+.test-qa.answer h4 { color: var(--green); }
+
+.test-qa p {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.test-timing {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+
+.test-timing strong {
+  color: var(--text-secondary);
+}
+
+/* ─── LOADING SPINNER ─── */
+.spinner-inline {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── SCROLLBAR ─── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* ─── TOOLTIP ─── */
+.tooltip-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip-wrap .tooltip-text {
+  visibility: hidden;
+  opacity: 0;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  background: var(--bg-panel-alt);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-bright);
+  padding: 4px 8px;
+  border-radius: 4px;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  z-index: 10;
+  transition: opacity 0.2s, visibility 0.2s;
+  pointer-events: none;
+}
+
+.tooltip-wrap:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* ─── SECTION DIVIDER ─── */
+.section-divider {
+  height: 1px;
+  background: var(--border);
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-left">
+    <div class="header-logo"></div>
+    <h1>Quiz<span>Master</span> Configuration</h1>
+  </div>
+  <div class="header-actions">
+    <a href="/dashboard" class="nav-link">← Dashboard</a>
+    <button class="btn" onclick="resetConfig()">Reset</button>
+    <button class="btn primary" onclick="saveConfig()" id="saveBtn">Save</button>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main class="config-wrap">
+
+  <!-- BANNER -->
+  <div class="banner" id="banner"></div>
+
+  <!-- LLM PROVIDER -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">LLM Provider</span>
+    </div>
+    <div class="panel-body">
+      <div class="field-row">
+        <div class="field">
+          <label>Provider</label>
+          <select id="llmProvider" onchange="onProviderChange()">
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="openai">OpenAI / Compatible</option>
+            <option value="ollama">Ollama (Local)</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Model</label>
+          <input type="text" id="llmModel" placeholder="e.g. claude-sonnet-4-20250514">
+        </div>
+      </div>
+      <div class="field">
+        <label>API Base URL</label>
+        <input type="text" id="llmBaseUrl" placeholder="https://api.anthropic.com">
+      </div>
+      <div class="field">
+        <label>API Key Environment Variable</label>
+        <div class="input-with-status">
+          <input type="text" id="llmApiKeyEnv" placeholder="ANTHROPIC_API_KEY">
+          <span class="input-status" id="apiKeyStatus"></span>
+        </div>
+        <span class="hint">The service reads the key from this env var at runtime. Keys are never stored in config.</span>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Temperature</label>
+          <input type="number" id="llmTemperature" step="0.1" min="0" max="2" placeholder="0.9">
+        </div>
+        <div class="field">
+          <label>Max Tokens</label>
+          <input type="number" id="llmMaxTokens" min="1" max="8192" placeholder="1024">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUIZ CONTENT -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Quiz Content</span>
+    </div>
+    <div class="panel-body">
+      <div class="field">
+        <label>Difficulty</label>
+        <div class="radio-group" id="difficultyGroup">
+          <input type="radio" name="difficulty" value="easy" id="diff-easy"><label for="diff-easy" onclick="setDifficulty('easy')">Easy</label>
+          <input type="radio" name="difficulty" value="medium" id="diff-medium" checked><label for="diff-medium" onclick="setDifficulty('medium')">Medium</label>
+          <input type="radio" name="difficulty" value="hard" id="diff-hard"><label for="diff-hard" onclick="setDifficulty('hard')">Hard</label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Categories</label>
+        <div class="chips-container" id="categoriesContainer"></div>
+      </div>
+
+      <div class="field">
+        <label>System Prompt</label>
+        <textarea id="systemPrompt" placeholder="Enter the LLM system prompt..."></textarea>
+        <div class="placeholder-note">
+          Available placeholders: <code>{{category}}</code> <code>{{difficulty}}</code>
+        </div>
+      </div>
+
+      <div class="prompt-actions">
+        <button class="btn primary" onclick="testPrompt()" id="testPromptBtn">Test Prompt</button>
+        <button class="btn" onclick="resetPrompt()">Reset to Default</button>
+      </div>
+
+      <div class="test-result" id="testResult">
+        <div class="test-result-header">
+          <span>Test Result</span>
+          <button class="test-result-close" onclick="closeTestResult()">✕</button>
+        </div>
+        <div class="test-result-body" id="testResultBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TEXT-TO-SPEECH -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Text-to-Speech</span>
+    </div>
+    <div class="panel-body">
+      <div class="field">
+        <label>Piper URL</label>
+        <div class="input-with-status">
+          <input type="text" id="piperUrl" placeholder="http://localhost:10200">
+          <span class="input-status" id="piperStatus"></span>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Voice Model</label>
+          <input type="text" id="voiceModel" placeholder="en_US-lessac-medium">
+        </div>
+        <div class="field">
+          <label>Sample Rate</label>
+          <div class="input-with-suffix">
+            <input type="number" id="sampleRate" min="8000" max="48000" placeholder="22050">
+            <span class="input-suffix">Hz</span>
+          </div>
+        </div>
+      </div>
+      <div class="tooltip-wrap">
+        <button class="btn" disabled>Test TTS</button>
+        <span class="tooltip-text">Coming soon — requires Piper connection</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUESTION POOL -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Question Pool</span>
+    </div>
+    <div class="panel-body">
+      <div class="field-row">
+        <div class="field">
+          <label>Target Size</label>
+          <input type="number" id="poolTargetSize" min="1" max="50" placeholder="10">
+          <span class="hint">Number of ready questions to maintain in the pool</span>
+        </div>
+        <div class="field">
+          <label>Min Ready Warning</label>
+          <input type="number" id="poolMinReady" min="0" max="50" placeholder="3">
+          <span class="hint">Dashboard warns when pool drops below this</span>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Backfill Trigger</label>
+          <input type="number" id="poolBackfillTrigger" min="1" max="50" placeholder="5">
+          <span class="hint">Start generating when pool reaches this count</span>
+        </div>
+        <div class="field">
+          <label>Audio TTL</label>
+          <div class="input-with-suffix">
+            <input type="number" id="audioTtl" min="1" max="1440" placeholder="60">
+            <span class="input-suffix">minutes</span>
+          </div>
+          <span class="hint">Unused audio files are cleaned up after this time</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEVICE -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Device</span>
+    </div>
+    <div class="panel-body">
+      <div class="field" style="max-width: 300px;">
+        <label>Idle Timeout</label>
+        <div class="input-with-suffix">
+          <input type="number" id="idleTimeout" min="30" max="3600" placeholder="300">
+          <span class="input-suffix">seconds</span>
+        </div>
+        <span class="hint">Seconds of inactivity before device enters deep sleep</span>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ─── STATE ───
+const DEFAULT_PROMPT = "You are a quiz master. Generate a trivia question and answer. The category is {{category}} and the difficulty level is {{difficulty}}. Return JSON with 'question' and 'answer' fields.";
+let categories = [];
+
+const PROVIDER_DEFAULTS = {
+  claude:  { api_base_url: 'https://api.anthropic.com',   api_key_env: 'ANTHROPIC_API_KEY' },
+  openai:  { api_base_url: 'https://api.openai.com/v1',   api_key_env: 'OPENAI_API_KEY' },
+  ollama:  { api_base_url: 'http://localhost:11434',       api_key_env: '' },
+  custom:  { api_base_url: '',                              api_key_env: '' }
+};
+
+// ─── BANNER ───
+function showBanner(msg, type = 'success') {
+  const b = document.getElementById('banner');
+  b.className = 'banner ' + type;
+  b.textContent = msg;
+  b.style.display = 'flex';
+  if (type === 'success') setTimeout(() => { b.style.display = 'none'; }, 5000);
+}
+
+// ─── CATEGORY CHIPS ───
+function renderCategories() {
+  const container = document.getElementById('categoriesContainer');
+  container.innerHTML = '';
+
+  categories.forEach((cat, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.innerHTML = cat + '<button class="remove" onclick="removeCategory(' + i + ')">×</button>';
+    container.appendChild(chip);
+  });
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'add-chip';
+  addBtn.textContent = '+ Add category';
+  addBtn.onclick = startAddCategory;
+  container.appendChild(addBtn);
+}
+
+function removeCategory(index) {
+  categories.splice(index, 1);
+  renderCategories();
+}
+
+function startAddCategory() {
+  const container = document.getElementById('categoriesContainer');
+  const addBtn = container.querySelector('.add-chip');
+  addBtn.style.display = 'none';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'add-chip-input';
+  input.placeholder = 'category name';
+  container.appendChild(input);
+  input.focus();
+
+  function commit() {
+    const val = input.value.trim().toLowerCase();
+    if (val && !categories.includes(val)) {
+      categories.push(val);
+    }
+    renderCategories();
+  }
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') commit();
+    if (e.key === 'Escape') renderCategories();
+  });
+  input.addEventListener('blur', commit);
+}
+
+// ─── DIFFICULTY ───
+function setDifficulty(val) {
+  document.getElementById('diff-' + val).checked = true;
+}
+
+function getDifficulty() {
+  const el = document.querySelector('input[name="difficulty"]:checked');
+  return el ? el.value : 'medium';
+}
+
+// ─── PROVIDER CHANGE ───
+function onProviderChange() {
+  const provider = document.getElementById('llmProvider').value;
+  const defaults = PROVIDER_DEFAULTS[provider];
+  if (provider !== 'custom') {
+    document.getElementById('llmBaseUrl').value = defaults.api_base_url;
+    document.getElementById('llmApiKeyEnv').value = defaults.api_key_env;
+  }
+}
+
+// ─── LOAD CONFIG ───
+async function loadConfig() {
+  try {
+    const res = await fetch('/api/admin/config');
+    if (!res.ok) throw new Error('Failed to load config');
+    const cfg = await res.json();
+    populateForm(cfg);
+  } catch (e) {
+    showBanner('Failed to load configuration: ' + e.message, 'error');
+  }
+}
+
+function populateForm(cfg) {
+  // LLM
+  document.getElementById('llmProvider').value = cfg.llm?.provider || 'claude';
+  document.getElementById('llmModel').value = cfg.llm?.model || '';
+  document.getElementById('llmBaseUrl').value = cfg.llm?.api_base_url || '';
+  document.getElementById('llmApiKeyEnv').value = cfg.llm?.api_key_env || '';
+  document.getElementById('llmTemperature').value = cfg.llm?.temperature ?? 0.9;
+  document.getElementById('llmMaxTokens').value = cfg.llm?.max_tokens ?? 1024;
+
+  // API key status
+  const keyStatus = document.getElementById('apiKeyStatus');
+  if (cfg.llm?.api_key_set) {
+    keyStatus.className = 'input-status set';
+    keyStatus.textContent = '✓ Set';
+  } else {
+    keyStatus.className = 'input-status not-set';
+    keyStatus.textContent = '✗ Not set';
+  }
+
+  // Quiz
+  setDifficulty(cfg.quiz?.difficulty || 'medium');
+  categories = cfg.quiz?.categories || [];
+  renderCategories();
+  document.getElementById('systemPrompt').value = cfg.quiz?.system_prompt || DEFAULT_PROMPT;
+
+  // TTS
+  document.getElementById('piperUrl').value = cfg.tts?.piper_url || '';
+  document.getElementById('voiceModel').value = cfg.tts?.voice_model || '';
+  document.getElementById('sampleRate').value = cfg.tts?.sample_rate ?? 22050;
+
+  // Pool
+  document.getElementById('poolTargetSize').value = cfg.pool?.target_size ?? 10;
+  document.getElementById('poolMinReady').value = cfg.pool?.min_ready ?? 3;
+  document.getElementById('poolBackfillTrigger').value = cfg.pool?.backfill_trigger ?? 5;
+  document.getElementById('audioTtl').value = cfg.pool?.audio_ttl_minutes ?? 60;
+
+  // Device
+  document.getElementById('idleTimeout').value = cfg.device?.idle_timeout_seconds ?? 300;
+
+  // Piper status — check on load
+  checkPiperStatus(cfg.tts?.piper_url);
+}
+
+async function checkPiperStatus(url) {
+  const statusEl = document.getElementById('piperStatus');
+  try {
+    // We can't directly check piper from the browser, so rely on admin status
+    const res = await fetch('/api/admin/status');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.piper_tts?.status === 'ok') {
+        statusEl.className = 'input-status set';
+        statusEl.textContent = '✓ Connected';
+      } else {
+        statusEl.className = 'input-status not-set';
+        statusEl.textContent = '✗ Disconnected';
+      }
+    }
+  } catch {
+    statusEl.className = 'input-status not-set';
+    statusEl.textContent = '✗ Unknown';
+  }
+}
+
+// ─── SAVE CONFIG ───
+async function saveConfig() {
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-inline"></span>Saving…';
+
+  const cfg = {
+    llm: {
+      provider: document.getElementById('llmProvider').value,
+      model: document.getElementById('llmModel').value,
+      api_base_url: document.getElementById('llmBaseUrl').value,
+      api_key_env: document.getElementById('llmApiKeyEnv').value,
+      temperature: parseFloat(document.getElementById('llmTemperature').value) || 0.9,
+      max_tokens: parseInt(document.getElementById('llmMaxTokens').value) || 1024
+    },
+    tts: {
+      piper_url: document.getElementById('piperUrl').value,
+      voice_model: document.getElementById('voiceModel').value,
+      sample_rate: parseInt(document.getElementById('sampleRate').value) || 22050,
+      output_format: 'wav'
+    },
+    pool: {
+      target_size: parseInt(document.getElementById('poolTargetSize').value) || 10,
+      min_ready: parseInt(document.getElementById('poolMinReady').value) || 3,
+      backfill_trigger: parseInt(document.getElementById('poolBackfillTrigger').value) || 5,
+      audio_ttl_minutes: parseInt(document.getElementById('audioTtl').value) || 60
+    },
+    quiz: {
+      categories: categories,
+      difficulty: getDifficulty(),
+      system_prompt: document.getElementById('systemPrompt').value
+    },
+    device: {
+      idle_timeout_seconds: parseInt(document.getElementById('idleTimeout').value) || 300
+    }
+  };
+
+  try {
+    const res = await fetch('/api/admin/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg)
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Save failed');
+    }
+
+    const updated = await res.json();
+    populateForm(updated);
+    showBanner('Configuration saved successfully. ' +
+      (categories.length ? '' : '') +
+      'Changes are active immediately.', 'success');
+  } catch (e) {
+    showBanner('Failed to save: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  }
+}
+
+// ─── RESET ───
+function resetConfig() {
+  loadConfig();
+  showBanner('Configuration reloaded from server.', 'success');
+}
+
+// ─── RESET PROMPT ───
+function resetPrompt() {
+  document.getElementById('systemPrompt').value = DEFAULT_PROMPT;
+}
+
+// ─── TEST PROMPT ───
+async function testPrompt() {
+  const btn = document.getElementById('testPromptBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-inline"></span>Generating…';
+
+  const result = document.getElementById('testResult');
+  const body = document.getElementById('testResultBody');
+
+  const category = categories.length > 0 ? categories[0] : 'general';
+
+  try {
+    const startTime = Date.now();
+    const res = await fetch('/api/admin/generate?category=' + encodeURIComponent(category), {
+      method: 'POST'
+    });
+
+    const elapsed = Date.now() - startTime;
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Generation failed');
+    }
+
+    const data = await res.json();
+
+    body.innerHTML =
+      '<div class="test-qa question"><h4>Question (' + data.category + ')</h4><p>' + (data.question_text || '—') + '</p></div>' +
+      '<div class="test-qa answer"><h4>Answer</h4><p>' + (data.answer_text || '—') + '</p></div>' +
+      '<div class="test-timing">Generated in <strong>' + (data.generation_time_ms?.total || elapsed) + 'ms</strong>' +
+      (data.generation_time_ms ? ' — LLM: ' + data.generation_time_ms.llm + 'ms, TTS Q: ' + data.generation_time_ms.piper_question + 'ms, TTS A: ' + data.generation_time_ms.piper_answer + 'ms' : '') +
+      '</div>';
+
+    result.className = 'test-result visible';
+  } catch (e) {
+    body.innerHTML = '<div class="test-qa" style="border-left:3px solid var(--red);"><h4 style="color:var(--red);">Error</h4><p>' + e.message + '</p></div>';
+    result.className = 'test-result visible error';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Test Prompt';
+  }
+}
+
+function closeTestResult() {
+  document.getElementById('testResult').className = 'test-result';
+}
+
+// ─── INIT ───
+loadConfig();
+</script>
+</body>
+</html>

@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuizMaster Debug Dashboard</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-deep: #0a0e14;
+  --bg-panel: #111820;
+  --bg-panel-alt: #151d28;
+  --bg-hover: #1a2332;
+  --bg-input: #0d1219;
+  --border: #1e2a3a;
+  --border-bright: #2a3a4e;
+  --text-primary: #d4dce8;
+  --text-secondary: #7a8a9e;
+  --text-dim: #4a5568;
+  --green: #22c55e;
+  --green-dim: #166534;
+  --green-glow: rgba(34, 197, 94, 0.15);
+  --yellow: #eab308;
+  --yellow-dim: #854d0e;
+  --yellow-glow: rgba(234, 179, 8, 0.15);
+  --red: #ef4444;
+  --red-dim: #991b1b;
+  --red-glow: rgba(239, 68, 68, 0.15);
+  --blue: #3b82f6;
+  --blue-dim: #1e3a5f;
+  --orange: #f97316;
+  --cyan: #06b6d4;
+  --accent: #22c55e;
+  --accent-glow: rgba(34, 197, 94, 0.08);
+  --panel-radius: 6px;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+}
+
+html { font-size: 14px; }
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scan-line overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+}
+
+/* ─── HEADER ─── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.header-logo {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green), 0 0 20px rgba(34,197,94,0.3);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.header-logo.error { background: var(--red); box-shadow: 0 0 8px var(--red), 0 0 20px rgba(239,68,68,0.3); }
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.header h1 {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+}
+
+.header h1 span {
+  color: var(--accent);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.refresh-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.refresh-toggle .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  transition: background 0.3s;
+}
+
+.refresh-toggle.paused .dot { background: var(--text-dim); }
+.refresh-toggle.paused { color: var(--text-dim); }
+
+.uptime-display {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+/* ─── LAYOUT ─── */
+.dashboard {
+  padding: 16px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.top-row {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 16px;
+}
+
+/* ─── PANELS ─── */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--panel-radius);
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel-alt);
+}
+
+.panel-title {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-secondary);
+}
+
+.panel-body { padding: 16px; }
+
+/* ─── STATUS PANEL ─── */
+.status-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.stat-value.green { color: var(--green); }
+.stat-value.yellow { color: var(--yellow); }
+.stat-value.red { color: var(--red); }
+
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 2px 0;
+}
+
+.pool-bar-track {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-input);
+  border-radius: 3px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.pool-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease, background 0.3s;
+  background: var(--green);
+}
+
+.pool-bar-fill.yellow { background: var(--yellow); }
+.pool-bar-fill.red { background: var(--red); }
+
+.generating-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 8px;
+}
+
+.generating-indicator.active { color: var(--yellow); }
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--yellow);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: none;
+}
+
+.generating-indicator.active .spinner { display: block; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.btn {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 6px 12px;
+  border: 1px solid var(--border-bright);
+  border-radius: 4px;
+  background: var(--bg-panel-alt);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.3px;
+}
+
+.btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.btn:active { transform: scale(0.97); }
+
+.btn.primary {
+  border-color: var(--green-dim);
+  color: var(--green);
+}
+
+.btn.primary:hover {
+  background: var(--green-glow);
+  border-color: var(--green);
+}
+
+.btn.danger {
+  border-color: var(--red-dim);
+  color: var(--red);
+}
+
+.btn.danger:hover {
+  background: var(--red-glow);
+  border-color: var(--red);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.error-detail {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+/* ─── QUIZ PLAYER ─── */
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.player-controls select {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 6px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.player-controls select:focus { border-color: var(--accent); }
+
+.difficulty-badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.qa-display {
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.qa-section {
+  padding: 14px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  border-left: 3px solid var(--border);
+}
+
+.qa-section.question { border-left-color: var(--cyan); }
+.qa-section.answer { border-left-color: var(--green); }
+
+.qa-section-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.qa-section.question .qa-section-label { color: var(--cyan); }
+.qa-section.answer .qa-section-label { color: var(--green); }
+
+.qa-section p {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.qa-section.placeholder p {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.audio-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.audio-row audio {
+  height: 32px;
+  flex: 1;
+  border-radius: 4px;
+}
+
+.audio-row label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 28px;
+}
+
+.json-toggle {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.json-toggle:hover { color: var(--text-secondary); }
+
+.json-toggle .arrow {
+  display: inline-block;
+  transition: transform 0.2s;
+  font-size: 0.6rem;
+}
+
+.json-toggle .arrow.open { transform: rotate(90deg); }
+
+.json-body {
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.6;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+  display: none;
+}
+
+.json-body.open { display: block; }
+
+/* ─── TABLES ─── */
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+th {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  background: var(--bg-panel-alt);
+}
+
+td {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+tr:hover td { background: var(--bg-hover); }
+
+td.mono-val { color: var(--text-primary); font-weight: 500; }
+
+/* Latency footer */
+.latency-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.latency-footer span { display: flex; align-items: center; gap: 6px; }
+
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.status-dot.ok { background: var(--green); }
+.status-dot.error { background: var(--red); }
+
+/* ─── BADGES ─── */
+.badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge.ready { background: var(--green-glow); color: var(--green); border: 1px solid var(--green-dim); }
+.badge.generating { background: var(--yellow-glow); color: var(--yellow); border: 1px solid var(--yellow-dim); animation: badge-pulse 1.5s ease-in-out infinite; }
+.badge.error { background: var(--red-glow); color: var(--red); border: 1px solid var(--red-dim); }
+
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.source-badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.source-badge.device { background: rgba(59,130,246,0.12); color: var(--blue); }
+.source-badge.dashboard { background: rgba(122,138,158,0.12); color: var(--text-secondary); }
+.source-badge.pool-worker { background: var(--green-glow); color: var(--green); }
+.source-badge.admin { background: rgba(249,115,22,0.12); color: var(--orange); }
+
+.http-status { font-weight: 600; }
+.http-status.s2xx { color: var(--green); }
+.http-status.s4xx { color: var(--yellow); }
+.http-status.s5xx { color: var(--red); }
+.http-status.ok { color: var(--green); }
+
+/* ─── QUEUE EXPAND ─── */
+.queue-row { cursor: pointer; }
+
+.queue-expand {
+  display: none;
+  padding: 14px 16px;
+  background: var(--bg-deep);
+  border-bottom: 1px solid var(--border);
+}
+
+.queue-expand.open { display: table-row; }
+
+.queue-expand td {
+  white-space: normal;
+  padding: 14px 16px;
+}
+
+.expand-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.expand-section {
+  padding: 10px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.expand-section h4 {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.expand-section p {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.timing-chips {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.timing-chip {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.timing-chip strong { color: var(--text-primary); margin-left: 4px; }
+
+/* ─── SCROLLBAR ─── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* ─── LOADING SHIMMER ─── */
+.shimmer {
+  background: linear-gradient(90deg, var(--bg-input) 0%, var(--bg-panel-alt) 50%, var(--bg-input) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ─── TOAST ─── */
+.toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 10px 16px;
+  border-radius: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-bright);
+  color: var(--text-primary);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  animation: toast-in 0.3s ease-out;
+}
+
+.toast.success { border-left: 3px solid var(--green); }
+.toast.error { border-left: 3px solid var(--red); }
+
+@keyframes toast-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Audio elements dark theme */
+audio { filter: invert(0.85) hue-rotate(180deg); }
+audio::-webkit-media-controls-panel { border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-left">
+    <div class="header-logo" id="healthDot"></div>
+    <h1>Quiz<span>Master</span> Debug Dashboard</h1>
+  </div>
+  <div class="header-right">
+    <span class="uptime-display" id="uptimeDisplay">—</span>
+    <div class="refresh-toggle" id="refreshToggle" onclick="toggleRefresh()">
+      <span class="dot"></span>
+      <span id="refreshLabel">Auto-refresh: 5s</span>
+    </div>
+  </div>
+</header>
+
+<!-- MAIN DASHBOARD -->
+<main class="dashboard">
+
+  <!-- TOP ROW -->
+  <div class="top-row">
+
+    <!-- SERVICE STATUS -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Service Status</span>
+      </div>
+      <div class="panel-body">
+        <div class="status-grid">
+          <div class="stat-row">
+            <span class="stat-label">Questions Served</span>
+            <span class="stat-value" id="questionsServed">—</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Errors (1h / total)</span>
+            <span class="stat-value" id="errorCounts">— / —</span>
+          </div>
+          <div class="error-detail" id="lastError" style="display:none;"></div>
+
+          <div class="divider"></div>
+
+          <div class="stat-row">
+            <span class="stat-label">Pool</span>
+            <span class="stat-value" id="poolCount">— / —</span>
+          </div>
+          <div class="pool-bar-track">
+            <div class="pool-bar-fill" id="poolBar" style="width:0%"></div>
+          </div>
+          <div class="generating-indicator" id="genIndicator">
+            <div class="spinner"></div>
+            <span id="genLabel">Idle</span>
+          </div>
+
+          <div class="action-buttons">
+            <button class="btn primary" onclick="forceGenerate()">Force Generate</button>
+            <button class="btn danger" onclick="flushQueue()">Flush Queue</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUIZ PLAYER -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Quiz Player</span>
+        <span class="difficulty-badge" id="difficultyBadge">—</span>
+      </div>
+      <div class="panel-body">
+        <div class="player-controls">
+          <button class="btn primary" id="btnGetQuestion" onclick="getQuestion()">Get Question</button>
+          <button class="btn" id="btnRevealAnswer" onclick="revealAnswer()" disabled>Reveal Answer</button>
+          <button class="btn" id="btnNextQuestion" onclick="nextQuestion()" disabled>Next Question</button>
+          <select id="categorySelect"><option value="">All Categories</option></select>
+        </div>
+
+        <div class="qa-display">
+          <div class="qa-section question placeholder" id="questionSection">
+            <div class="qa-section-label">Question</div>
+            <p id="questionText">Press "Get Question" to start</p>
+          </div>
+          <div class="qa-section answer" id="answerSection" style="display:none;">
+            <div class="qa-section-label">Answer</div>
+            <p id="answerText"></p>
+          </div>
+        </div>
+
+        <div class="audio-row">
+          <label>Q</label>
+          <audio id="questionAudio" controls preload="none"></audio>
+        </div>
+        <div class="audio-row">
+          <label>A</label>
+          <audio id="answerAudio" controls preload="none"></audio>
+        </div>
+
+        <div class="json-toggle" onclick="toggleJson()">
+          <span class="arrow" id="jsonArrow">▶</span> Raw JSON
+        </div>
+        <div class="json-body" id="jsonBody"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- LATENCY METRICS -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Latency Metrics</span>
+      <span style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-dim);">Rolling window</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Stage</th>
+            <th>Last</th>
+            <th>Avg</th>
+            <th>Min</th>
+            <th>Max</th>
+            <th>P95</th>
+            <th>Samples</th>
+          </tr>
+        </thead>
+        <tbody id="latencyBody">
+          <tr><td colspan="7" style="color:var(--text-dim);text-align:center;padding:20px;">Waiting for data…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="latency-footer" id="latencyFooter">
+      <span><span class="status-dot" id="llmDot"></span> LLM: <span id="llmInfo">—</span></span>
+      <span><span class="status-dot" id="piperDot"></span> Piper: <span id="piperInfo">—</span></span>
+    </div>
+  </div>
+
+  <!-- QUESTION QUEUE -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Question Queue</span>
+      <span style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-dim);" id="queueCount">0 items</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Category</th>
+            <th>Difficulty</th>
+            <th>Question</th>
+            <th>Status</th>
+            <th>Gen Time</th>
+          </tr>
+        </thead>
+        <tbody id="queueBody">
+          <tr><td colspan="6" style="color:var(--text-dim);text-align:center;padding:20px;">Queue empty</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- REQUEST LOG -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Request Log</span>
+      <span style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-dim);" id="logCount">0 entries</span>
+    </div>
+    <div class="table-wrap" style="max-height:320px;overflow-y:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Endpoint</th>
+            <th>Source</th>
+            <th>Response</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="logBody">
+          <tr><td colspan="5" style="color:var(--text-dim);text-align:center;padding:20px;">No requests logged</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ─── STATE ───
+let refreshEnabled = true;
+let refreshTimer = null;
+let currentQuestion = null;
+let expandedQueueId = null;
+
+// ─── FORMAT HELPERS ───
+function fmtMs(ms) {
+  if (ms == null || ms === 0) return '—';
+  return ms >= 1000 ? (ms / 1000).toFixed(1) + 's' : ms + 'ms';
+}
+
+function fmtUptime(s) {
+  if (!s) return '—';
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return d + 'd ' + h + 'h ' + m + 'm';
+  if (h > 0) return h + 'h ' + m + 'm';
+  return m + 'm';
+}
+
+function fmtTime(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch { return iso; }
+}
+
+function truncate(s, n) {
+  if (!s) return '';
+  return s.length > n ? s.substring(0, n) + '…' : s;
+}
+
+// ─── TOAST ───
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+// ─── REFRESH ───
+function toggleRefresh() {
+  refreshEnabled = !refreshEnabled;
+  const toggle = document.getElementById('refreshToggle');
+  const label = document.getElementById('refreshLabel');
+  toggle.classList.toggle('paused', !refreshEnabled);
+  label.textContent = refreshEnabled ? 'Auto-refresh: 5s' : 'Paused';
+  if (refreshEnabled) startPolling();
+  else stopPolling();
+}
+
+function startPolling() {
+  stopPolling();
+  poll();
+  refreshTimer = setInterval(poll, 5000);
+}
+
+function stopPolling() {
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+}
+
+// ─── POLLING ───
+async function poll() {
+  try {
+    const [statusRes, queueRes, logRes] = await Promise.all([
+      fetch('/api/admin/status'),
+      fetch('/api/admin/queue'),
+      fetch('/api/admin/log?limit=50')
+    ]);
+    if (statusRes.ok) renderStatus(await statusRes.json());
+    if (queueRes.ok) renderQueue(await queueRes.json());
+    if (logRes.ok) renderLog(await logRes.json());
+  } catch (e) {
+    document.getElementById('healthDot').classList.add('error');
+  }
+}
+
+// ─── RENDER STATUS ───
+function renderStatus(data) {
+  document.getElementById('healthDot').classList.remove('error');
+  document.getElementById('uptimeDisplay').textContent = '↑ ' + fmtUptime(data.uptime_seconds);
+  document.getElementById('questionsServed').textContent = data.questions_served;
+  document.getElementById('difficultyBadge').textContent = data.difficulty;
+
+  // Errors
+  const e = data.errors || {};
+  const ecEl = document.getElementById('errorCounts');
+  ecEl.textContent = (e.last_hour || 0) + ' / ' + (e.total || 0);
+  ecEl.className = 'stat-value' + (e.total > 0 ? ' yellow' : '');
+
+  const leEl = document.getElementById('lastError');
+  if (e.last_error && e.last_error.timestamp) {
+    leEl.style.display = 'block';
+    leEl.textContent = fmtTime(e.last_error.timestamp) + ' [' + e.last_error.stage + '] ' + e.last_error.message;
+  } else {
+    leEl.style.display = 'none';
+  }
+
+  // Pool
+  const poolSize = data.pool_size || 0;
+  const poolTarget = data.pool_target || 10;
+  const pcEl = document.getElementById('poolCount');
+  const pct = Math.min(100, (poolSize / poolTarget) * 100);
+
+  pcEl.textContent = poolSize + ' / ' + poolTarget;
+  let poolClass = 'green';
+  if (poolSize === 0) { poolClass = 'red'; pcEl.className = 'stat-value red'; }
+  else if (poolSize < (data.pool_min_ready || 3)) { poolClass = 'yellow'; pcEl.className = 'stat-value yellow'; }
+  else { pcEl.className = 'stat-value green'; }
+
+  const bar = document.getElementById('poolBar');
+  bar.style.width = pct + '%';
+  bar.className = 'pool-bar-fill ' + poolClass;
+
+  // Generating
+  const gi = document.getElementById('genIndicator');
+  const gl = document.getElementById('genLabel');
+  if (data.pool_generating) {
+    gi.classList.add('active');
+    gl.textContent = 'Generating…';
+  } else {
+    gi.classList.remove('active');
+    gl.textContent = 'Idle';
+  }
+
+  // Categories dropdown
+  if (data.categories) {
+    const sel = document.getElementById('categorySelect');
+    const current = sel.value;
+    const opts = '<option value="">All Categories</option>' +
+      data.categories.map(c => '<option value="' + c + '"' + (c === current ? ' selected' : '') + '>' + c + '</option>').join('');
+    sel.innerHTML = opts;
+  }
+
+  // Latency
+  renderLatency(data.latency, data.llm_api, data.piper_tts);
+}
+
+// ─── RENDER LATENCY ───
+function renderLatency(lat, llm, piper) {
+  if (!lat) return;
+  const rows = [
+    { name: 'LLM API', data: lat.llm },
+    { name: 'Piper TTS', data: lat.piper_tts },
+    { name: 'Total Generation', data: lat.total_generation },
+    { name: 'Quiz API Response', data: lat.api_quiz_response }
+  ];
+
+  const html = rows.map(r => {
+    const d = r.data || {};
+    return '<tr>' +
+      '<td>' + r.name + '</td>' +
+      '<td class="mono-val">' + fmtMs(d.last_ms) + '</td>' +
+      '<td class="mono-val">' + fmtMs(d.avg_ms) + '</td>' +
+      '<td class="mono-val">' + fmtMs(d.min_ms) + '</td>' +
+      '<td class="mono-val">' + fmtMs(d.max_ms) + '</td>' +
+      '<td class="mono-val">' + fmtMs(d.p95_ms) + '</td>' +
+      '<td class="mono-val">' + (d.sample_count || 0) + '</td>' +
+      '</tr>';
+  }).join('');
+
+  document.getElementById('latencyBody').innerHTML = html || '<tr><td colspan="7" style="color:var(--text-dim);text-align:center;padding:20px;">No data yet</td></tr>';
+
+  // Footer
+  if (llm) {
+    document.getElementById('llmDot').className = 'status-dot ' + (llm.status === 'ok' ? 'ok' : 'error');
+    document.getElementById('llmInfo').textContent = llm.provider + ' / ' + llm.model;
+  }
+  if (piper) {
+    document.getElementById('piperDot').className = 'status-dot ' + (piper.status === 'ok' ? 'ok' : 'error');
+    document.getElementById('piperInfo').textContent = piper.status === 'ok' ? 'Connected' : 'Disconnected';
+  }
+}
+
+// ─── RENDER QUEUE ───
+function renderQueue(queue) {
+  document.getElementById('queueCount').textContent = queue.length + ' item' + (queue.length !== 1 ? 's' : '');
+
+  if (!queue.length) {
+    document.getElementById('queueBody').innerHTML = '<tr><td colspan="6" style="color:var(--text-dim);text-align:center;padding:20px;">Queue empty</td></tr>';
+    return;
+  }
+
+  let html = '';
+  queue.forEach(q => {
+    const isExpanded = expandedQueueId === q.id;
+    const status = q.served ? 'served' : 'ready';
+    const genTime = q.generation_time_ms ? fmtMs(q.generation_time_ms.total) : '—';
+    const statusBadge = '<span class="badge ' + status + '">' + status + '</span>';
+
+    html += '<tr class="queue-row" onclick="toggleQueueExpand(\'' + q.id + '\')">' +
+      '<td class="mono-val">' + q.id + '</td>' +
+      '<td>' + q.category + '</td>' +
+      '<td>' + q.difficulty + '</td>' +
+      '<td>' + truncate(q.question_text, 50) + '</td>' +
+      '<td>' + statusBadge + '</td>' +
+      '<td class="mono-val">' + genTime + '</td>' +
+      '</tr>';
+
+    html += '<tr class="queue-expand' + (isExpanded ? ' open' : '') + '" id="qexp-' + q.id + '">' +
+      '<td colspan="6">' +
+      '<div class="expand-grid">' +
+      '<div class="expand-section"><h4>Question</h4><p>' + (q.question_text || '—') + '</p>' +
+      (q.question_audio_url ? '<div class="audio-row" style="margin-top:8px;"><label>Q</label><audio controls preload="none" src="' + q.question_audio_url + '"></audio></div>' : '') +
+      '</div>' +
+      '<div class="expand-section"><h4>Answer</h4><p>' + (q.answer_text || '—') + '</p>' +
+      (q.answer_audio_url ? '<div class="audio-row" style="margin-top:8px;"><label>A</label><audio controls preload="none" src="' + q.answer_audio_url + '"></audio></div>' : '') +
+      '</div>' +
+      '</div>' +
+      (q.generation_time_ms ? '<div class="timing-chips">' +
+        '<div class="timing-chip">LLM<strong>' + fmtMs(q.generation_time_ms.llm) + '</strong></div>' +
+        '<div class="timing-chip">TTS Q<strong>' + fmtMs(q.generation_time_ms.piper_question) + '</strong></div>' +
+        '<div class="timing-chip">TTS A<strong>' + fmtMs(q.generation_time_ms.piper_answer) + '</strong></div>' +
+        '<div class="timing-chip">Total<strong>' + fmtMs(q.generation_time_ms.total) + '</strong></div>' +
+        '</div>' : '') +
+      '</td></tr>';
+  });
+
+  document.getElementById('queueBody').innerHTML = html;
+}
+
+function toggleQueueExpand(id) {
+  if (expandedQueueId === id) {
+    expandedQueueId = null;
+  } else {
+    expandedQueueId = id;
+  }
+  // Re-render the current state
+  document.querySelectorAll('.queue-expand').forEach(el => {
+    el.classList.toggle('open', el.id === 'qexp-' + expandedQueueId);
+  });
+}
+
+// ─── RENDER LOG ───
+function renderLog(log) {
+  document.getElementById('logCount').textContent = log.length + ' entr' + (log.length !== 1 ? 'ies' : 'y');
+
+  if (!log.length) {
+    document.getElementById('logBody').innerHTML = '<tr><td colspan="5" style="color:var(--text-dim);text-align:center;padding:20px;">No requests logged</td></tr>';
+    return;
+  }
+
+  const html = log.map(entry => {
+    const ts = fmtTime(entry.timestamp);
+    const src = entry.source || 'unknown';
+    const srcClass = src.replace(/[^a-z-]/g, '');
+    const respTime = entry.response_ms ? fmtMs(entry.response_ms) : (entry.total_ms ? fmtMs(entry.total_ms) : '—');
+
+    let statusVal = entry.status;
+    let statusClass = 'ok';
+    if (typeof statusVal === 'number') {
+      if (statusVal >= 500) statusClass = 's5xx';
+      else if (statusVal >= 400) statusClass = 's4xx';
+      else statusClass = 's2xx';
+    }
+
+    return '<tr>' +
+      '<td class="mono-val">' + ts + '</td>' +
+      '<td>' + entry.endpoint + '</td>' +
+      '<td><span class="source-badge ' + srcClass + '">' + src + '</span></td>' +
+      '<td class="mono-val">' + respTime + '</td>' +
+      '<td><span class="http-status ' + statusClass + '">' + statusVal + '</span></td>' +
+      '</tr>';
+  }).join('');
+
+  document.getElementById('logBody').innerHTML = html;
+}
+
+// ─── QUIZ PLAYER ───
+async function getQuestion() {
+  const btn = document.getElementById('btnGetQuestion');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+
+  const category = document.getElementById('categorySelect').value;
+  const url = '/api/quiz?source=dashboard' + (category ? '&category=' + encodeURIComponent(category) : '');
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      toast(err.error || 'Failed to get question', 'error');
+      return;
+    }
+    currentQuestion = await res.json();
+    showQuestion(currentQuestion);
+  } catch (e) {
+    toast('Network error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Get Question';
+  }
+}
+
+function showQuestion(q) {
+  const qs = document.getElementById('questionSection');
+  qs.classList.remove('placeholder');
+  document.getElementById('questionText').textContent = q.question_text;
+
+  document.getElementById('answerSection').style.display = 'none';
+  document.getElementById('answerText').textContent = '';
+
+  document.getElementById('questionAudio').src = q.question_audio_url;
+  document.getElementById('answerAudio').src = '';
+  document.getElementById('answerAudio').removeAttribute('src');
+
+  document.getElementById('btnRevealAnswer').disabled = false;
+  document.getElementById('btnNextQuestion').disabled = true;
+
+  document.getElementById('jsonBody').textContent = JSON.stringify(q, null, 2);
+}
+
+function revealAnswer() {
+  if (!currentQuestion) return;
+  document.getElementById('answerSection').style.display = 'block';
+  document.getElementById('answerText').textContent = currentQuestion.answer_text;
+  document.getElementById('answerAudio').src = currentQuestion.answer_audio_url;
+
+  document.getElementById('btnRevealAnswer').disabled = true;
+  document.getElementById('btnNextQuestion').disabled = false;
+}
+
+function nextQuestion() {
+  getQuestion();
+}
+
+// ─── JSON TOGGLE ───
+function toggleJson() {
+  const body = document.getElementById('jsonBody');
+  const arrow = document.getElementById('jsonArrow');
+  body.classList.toggle('open');
+  arrow.classList.toggle('open');
+}
+
+// ─── ACTIONS ───
+async function forceGenerate() {
+  toast('Generating question…');
+  try {
+    const category = document.getElementById('categorySelect').value;
+    const url = '/api/admin/generate' + (category ? '?category=' + encodeURIComponent(category) : '');
+    const res = await fetch(url, { method: 'POST' });
+    if (res.ok) {
+      toast('Question generated');
+      poll();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast(err.error || 'Generation failed', 'error');
+    }
+  } catch (e) {
+    toast('Network error', 'error');
+  }
+}
+
+async function flushQueue() {
+  try {
+    const res = await fetch('/api/admin/queue', { method: 'DELETE' });
+    if (res.ok) {
+      toast('Queue flushed');
+      poll();
+    } else {
+      toast('Flush failed', 'error');
+    }
+  } catch (e) {
+    toast('Network error', 'error');
+  }
+}
+
+// ─── INIT ───
+startPolling();
+</script>
+</body>
+</html>
