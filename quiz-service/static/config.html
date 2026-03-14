@@ -741,8 +741,9 @@ textarea {
         </div>
       </div>
 
-      <div>
+      <div style="display:flex;gap:8px;align-items:center;">
         <button class="btn primary" onclick="testLLM()" id="testLLMBtn">Test Connection</button>
+        <button class="btn" onclick="listModels()" id="listModelsBtn">List Models</button>
       </div>
 
       <div class="test-result" id="llmTestResult">
@@ -1234,6 +1235,54 @@ async function testLLM() {
     btn.disabled = false;
     btn.textContent = 'Test Connection';
   }
+}
+
+// ─── LIST MODELS ───
+async function listModels() {
+  const btn = document.getElementById('listModelsBtn');
+  const result = document.getElementById('llmTestResult');
+  const body = document.getElementById('llmTestResultBody');
+  const title = document.getElementById('llmTestResultTitle');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-inline"></span>Fetching…';
+
+  // Save current form values first so the endpoint uses the right config
+  await saveConfig();
+
+  try {
+    const res = await fetch('/api/admin/list-models');
+    const data = await res.json();
+
+    if (data.error) {
+      title.textContent = '✗ List Models failed';
+      result.className = 'test-result visible error';
+      body.innerHTML = '<div class="test-qa" style="border-left:3px solid var(--red)"><h4 style="color:var(--red)">Error</h4><p>' + data.error + '</p></div>';
+    } else {
+      title.textContent = '✓ Available models (' + data.models.length + ')';
+      result.className = 'test-result visible';
+      const items = data.models.map(m => {
+        const name = m.replace('models/', '');
+        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">' +
+          '<span style="font-family:var(--font-mono);font-size:0.75rem;color:var(--text-primary)">' + name + '</span>' +
+          '<button class="btn" style="padding:2px 8px;font-size:0.65rem;" onclick="useModel(\'' + name + '\')">Use</button>' +
+          '</div>';
+      }).join('');
+      body.innerHTML = '<div style="max-height:240px;overflow-y:auto;">' + items + '</div>';
+    }
+  } catch (e) {
+    title.textContent = '✗ Request failed';
+    result.className = 'test-result visible error';
+    body.innerHTML = '<div class="test-qa" style="border-left:3px solid var(--red)"><h4 style="color:var(--red)">Error</h4><p>' + e.message + '</p></div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'List Models';
+  }
+}
+
+function useModel(name) {
+  document.getElementById('llmModel').value = 'models/' + name;
+  document.getElementById('llmTestResult').className = 'test-result';
 }
 
 // ─── INIT ───

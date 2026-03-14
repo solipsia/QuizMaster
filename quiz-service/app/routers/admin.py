@@ -78,6 +78,34 @@ async def get_log(request: Request, limit: int = Query(50, ge=1, le=500)):
     return request.app.state.request_log.get(limit)
 
 
+@router.get("/api/admin/list-models")
+async def list_models(request: Request):
+    """Call Google ListModels to show available models for the current API key."""
+    import httpx
+    state = request.app.state
+    config = state.config_ref[0]
+    api_key = get_api_key(config.llm.api_key_env)
+    if not api_key:
+        return JSONResponse(status_code=400, content={"error": f"API key env var {config.llm.api_key_env} is not set"})
+
+    base = config.llm.api_base_url.rstrip("/")
+    url = f"{base}/models"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, headers={"x-goog-api-key": api_key.strip()})
+        if not resp.is_success:
+            try:
+                detail = resp.json().get("error", {}).get("message", resp.text)
+            except Exception:
+                detail = resp.text
+            return JSONResponse(status_code=200, content={"error": f"Google AI {resp.status_code}: {detail}"})
+        data = resp.json()
+        models = [m.get("name") for m in data.get("models", []) if "generateContent" in m.get("supportedGenerationMethods", [])]
+        return {"models": models}
+    except Exception as e:
+        return JSONResponse(status_code=200, content={"error": str(e)})
+
+
 @router.post("/api/admin/test-llm")
 async def test_llm(request: Request):
     """Test the LLM connection using the config submitted in the request body.
