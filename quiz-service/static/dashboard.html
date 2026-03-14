@@ -684,6 +684,36 @@ td.mono-val { color: var(--text-primary); font-weight: 500; }
 /* Audio elements dark theme */
 audio { filter: invert(0.85) hue-rotate(180deg); }
 audio::-webkit-media-controls-panel { border-radius: 4px; }
+
+/* ─── TABS ─── */
+.header-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 100%;
+}
+
+.tab {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: var(--text-dim);
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+
+.tab:hover { color: var(--text-secondary); }
+
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
 </style>
 </head>
 <body>
@@ -692,8 +722,12 @@ audio::-webkit-media-controls-panel { border-radius: 4px; }
 <header class="header">
   <div class="header-left">
     <div class="header-logo" id="healthDot"></div>
-    <h1>Quiz<span>Master</span> Debug Dashboard</h1>
+    <h1>Quiz<span>Master</span></h1>
   </div>
+  <nav class="header-tabs">
+    <a class="tab active" href="/dashboard">Dashboard</a>
+    <a class="tab" href="/config">Configuration</a>
+  </nav>
   <div class="header-right">
     <span class="uptime-display" id="uptimeDisplay">—</span>
     <div class="refresh-toggle" id="refreshToggle" onclick="toggleRefresh()">

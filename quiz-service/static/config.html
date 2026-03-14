@@ -640,6 +640,36 @@ textarea {
   height: 1px;
   background: var(--border);
 }
+
+/* ─── TABS ─── */
+.header-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 100%;
+}
+
+.tab {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: var(--text-dim);
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+
+.tab:hover { color: var(--text-secondary); }
+
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
 </style>
 </head>
 <body>
@@ -648,10 +678,13 @@ textarea {
 <header class="header">
   <div class="header-left">
     <div class="header-logo"></div>
-    <h1>Quiz<span>Master</span> Configuration</h1>
+    <h1>Quiz<span>Master</span></h1>
   </div>
+  <nav class="header-tabs">
+    <a class="tab" href="/dashboard">Dashboard</a>
+    <a class="tab active" href="/config">Configuration</a>
+  </nav>
   <div class="header-actions">
-    <a href="/dashboard" class="nav-link">← Dashboard</a>
     <button class="btn" onclick="resetConfig()">Reset</button>
     <button class="btn primary" onclick="saveConfig()" id="saveBtn">Save</button>
   </div>
