@@ -38,8 +38,17 @@ class GoogleAIClient(LLMClient):
                 headers={"x-goog-api-key": self._api_key, "content-type": "application/json"},
                 json=payload,
             )
-            resp.raise_for_status()
+            if not resp.is_success:
+                try:
+                    detail = resp.json()
+                    msg = detail.get("error", {}).get("message", resp.text)
+                except Exception:
+                    msg = resp.text
+                raise RuntimeError(f"Google AI {resp.status_code}: {msg}")
 
         data = resp.json()
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        try:
+            text = data["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError) as e:
+            raise RuntimeError(f"Unexpected Google AI response: {data}") from e
         return self.parse_qa_response(text)
