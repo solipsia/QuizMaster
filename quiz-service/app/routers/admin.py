@@ -78,6 +78,43 @@ async def get_log(request: Request, limit: int = Query(50, ge=1, le=500)):
     return request.app.state.request_log.get(limit)
 
 
+@router.post("/api/admin/test-llm")
+async def test_llm(request: Request):
+    """Test the LLM connection using the config submitted in the request body.
+    Does not save config or affect the pool."""
+    body = await request.json()
+    try:
+        from ..models import LLMConfig
+        llm_cfg = LLMConfig(**body)
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"ok": False, "error": f"Invalid config: {e}"})
+
+    api_key = get_api_key(llm_cfg.api_key_env)
+    try:
+        client = create_llm_client(llm_cfg, api_key)
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"ok": False, "error": str(e)})
+
+    test_prompt = "Reply with a single valid JSON object: {\"question\": \"What is 2+2?\", \"answer\": \"4\"}. No other text."
+    t0 = time.time()
+    try:
+        result = await client.generate(test_prompt)
+        latency_ms = int((time.time() - t0) * 1000)
+        return {
+            "ok": True,
+            "latency_ms": latency_ms,
+            "provider": llm_cfg.provider,
+            "model": llm_cfg.model,
+            "response": result,
+        }
+    except Exception as e:
+        latency_ms = int((time.time() - t0) * 1000)
+        return JSONResponse(
+            status_code=200,
+            content={"ok": False, "latency_ms": latency_ms, "error": str(e)},
+        )
+
+
 @router.post("/api/admin/generate")
 async def force_generate(request: Request, category: str | None = Query(None)):
     state = request.app.state

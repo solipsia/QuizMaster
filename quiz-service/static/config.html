@@ -740,6 +740,18 @@ textarea {
           <input type="number" id="llmMaxTokens" min="1" max="8192" placeholder="1024">
         </div>
       </div>
+
+      <div>
+        <button class="btn primary" onclick="testLLM()" id="testLLMBtn">Test Connection</button>
+      </div>
+
+      <div class="test-result" id="llmTestResult">
+        <div class="test-result-header">
+          <span id="llmTestResultTitle">LLM Test</span>
+          <button class="test-result-close" onclick="document.getElementById('llmTestResult').className='test-result'">✕</button>
+        </div>
+        <div id="llmTestResultBody"></div>
+      </div>
     </div>
   </div>
 
@@ -1161,6 +1173,67 @@ async function testPrompt() {
 
 function closeTestResult() {
   document.getElementById('testResult').className = 'test-result';
+}
+
+// ─── TEST LLM ───
+async function testLLM() {
+  const btn = document.getElementById('testLLMBtn');
+  const result = document.getElementById('llmTestResult');
+  const body = document.getElementById('llmTestResultBody');
+  const title = document.getElementById('llmTestResultTitle');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-inline"></span>Testing…';
+
+  const llmConfig = {
+    provider: document.getElementById('llmProvider').value,
+    model: document.getElementById('llmModel').value,
+    api_base_url: document.getElementById('llmBaseUrl').value,
+    api_key_env: document.getElementById('llmApiKeyEnv').value,
+    temperature: parseFloat(document.getElementById('llmTemperature').value) || 0.9,
+    max_tokens: parseInt(document.getElementById('llmMaxTokens').value) || 1024,
+  };
+
+  try {
+    const res = await fetch('/api/admin/test-llm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(llmConfig),
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      title.textContent = '✓ Connection successful';
+      result.className = 'test-result visible';
+      body.innerHTML =
+        '<div style="display:flex;gap:24px;font-family:var(--font-mono);font-size:0.75rem;color:var(--text-secondary);margin-bottom:10px;">' +
+          '<span>Provider: <strong style="color:var(--text-primary)">' + data.provider + '</strong></span>' +
+          '<span>Model: <strong style="color:var(--text-primary)">' + data.model + '</strong></span>' +
+          '<span>Latency: <strong style="color:var(--green)">' + data.latency_ms + 'ms</strong></span>' +
+        '</div>' +
+        '<div class="test-qa question"><h4>Test response</h4>' +
+          '<p>' + (data.response?.question || '—') + ' → ' + (data.response?.answer || '—') + '</p>' +
+        '</div>';
+    } else {
+      title.textContent = '✗ Connection failed';
+      result.className = 'test-result visible error';
+      body.innerHTML =
+        '<div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-secondary);margin-bottom:6px;">' +
+          (data.latency_ms ? 'Failed after ' + data.latency_ms + 'ms' : '') +
+        '</div>' +
+        '<div class="test-qa" style="border-left:3px solid var(--red)">' +
+          '<h4 style="color:var(--red)">Error</h4>' +
+          '<p>' + (data.error || 'Unknown error') + '</p>' +
+        '</div>';
+    }
+  } catch (e) {
+    title.textContent = '✗ Request failed';
+    result.className = 'test-result visible error';
+    body.innerHTML = '<div class="test-qa" style="border-left:3px solid var(--red)"><h4 style="color:var(--red)">Error</h4><p>' + e.message + '</p></div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Test Connection';
+  }
 }
 
 // ─── INIT ───
