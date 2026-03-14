@@ -14,6 +14,7 @@ class GoogleAIClient(LLMClient):
     async def generate(self, system_prompt: str) -> dict:
         if not self._api_key:
             raise RuntimeError(f"API key env var {self._config.api_key_env} is not set")
+        api_key = self._api_key.strip()
 
         base = self._config.api_base_url.rstrip("/")
         model = self._config.model  # e.g. "models/gemini-2.5-flash"
@@ -35,7 +36,7 @@ class GoogleAIClient(LLMClient):
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 url,
-                headers={"x-goog-api-key": self._api_key, "content-type": "application/json"},
+                headers={"x-goog-api-key": api_key, "content-type": "application/json"},
                 json=payload,
             )
             if not resp.is_success:
