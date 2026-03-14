@@ -673,6 +673,7 @@ textarea {
         <div class="field">
           <label>Provider</label>
           <select id="llmProvider" onchange="onProviderChange()">
+            <option value="google">Google AI (Gemini)</option>
             <option value="claude">Claude (Anthropic)</option>
             <option value="openai">OpenAI / Compatible</option>
             <option value="ollama">Ollama (Local)</option>
@@ -846,10 +847,11 @@ const DEFAULT_PROMPT = "You are a quiz master. Generate a trivia question and an
 let categories = [];
 
 const PROVIDER_DEFAULTS = {
-  claude:  { api_base_url: 'https://api.anthropic.com',   api_key_env: 'ANTHROPIC_API_KEY' },
-  openai:  { api_base_url: 'https://api.openai.com/v1',   api_key_env: 'OPENAI_API_KEY' },
-  ollama:  { api_base_url: 'http://localhost:11434',       api_key_env: '' },
-  custom:  { api_base_url: '',                              api_key_env: '' }
+  google:  { api_base_url: 'https://generativelanguage.googleapis.com/v1beta', api_key_env: 'GOOGLE_API_KEY' },
+  claude:  { api_base_url: 'https://api.anthropic.com',                        api_key_env: 'ANTHROPIC_API_KEY' },
+  openai:  { api_base_url: 'https://api.openai.com/v1',                        api_key_env: 'OPENAI_API_KEY' },
+  ollama:  { api_base_url: 'http://localhost:11434',                            api_key_env: '' },
+  custom:  { api_base_url: '',                                                  api_key_env: '' },
 };
 
 // ─── BANNER ───

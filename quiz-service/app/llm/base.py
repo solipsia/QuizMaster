@@ -34,6 +34,9 @@ def create_llm_client(config: LLMConfig, api_key: str | None) -> LLMClient:
     if config.provider == "claude":
         from .claude import ClaudeClient
         return ClaudeClient(config, api_key)
+    elif config.provider == "google":
+        from .google import GoogleAIClient
+        return GoogleAIClient(config, api_key)
     elif config.provider == "ollama":
         from .ollama import OllamaClient
         return OllamaClient(config)
