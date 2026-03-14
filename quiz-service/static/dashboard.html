@@ -774,8 +774,11 @@ audio::-webkit-media-controls-panel { border-radius: 4px; }
             <span id="genLabel">Idle</span>
           </div>
 
+          <div class="error-detail" id="pauseReason" style="display:none;color:var(--yellow);"></div>
+
           <div class="action-buttons">
             <button class="btn primary" onclick="forceGenerate()">Force Generate</button>
+            <button class="btn" id="pauseResumeBtn" onclick="toggleWorker()">Pause</button>
             <button class="btn danger" onclick="flushQueue()">Flush Queue</button>
           </div>
         </div>
@@ -994,6 +997,7 @@ async function poll() {
 // ─── RENDER STATUS ───
 function renderStatus(data) {
   document.getElementById('healthDot').classList.remove('error');
+  _workerPaused = !!data.pool_paused;
   document.getElementById('uptimeDisplay').textContent = '↑ ' + fmtUptime(data.uptime_seconds);
   document.getElementById('questionsServed').textContent = data.questions_served;
   document.getElementById('difficultyBadge').textContent = data.difficulty;
@@ -1028,15 +1032,36 @@ function renderStatus(data) {
   bar.style.width = pct + '%';
   bar.className = 'pool-bar-fill ' + poolClass;
 
-  // Generating
+  // Generating / paused state
   const gi = document.getElementById('genIndicator');
   const gl = document.getElementById('genLabel');
-  if (data.pool_generating) {
+  const pr = document.getElementById('pauseReason');
+  const pb = document.getElementById('pauseResumeBtn');
+
+  if (data.pool_paused) {
+    gi.classList.remove('active');
+    gl.textContent = 'Paused';
+    gl.style.color = 'var(--yellow)';
+    pb.textContent = 'Resume';
+    pb.className = 'btn primary';
+    if (data.pool_pause_reason) {
+      pr.style.display = 'block';
+      pr.textContent = data.pool_pause_reason;
+    }
+  } else if (data.pool_generating) {
     gi.classList.add('active');
     gl.textContent = 'Generating…';
+    gl.style.color = '';
+    pb.textContent = 'Pause';
+    pb.className = 'btn';
+    pr.style.display = 'none';
   } else {
     gi.classList.remove('active');
     gl.textContent = 'Idle';
+    gl.style.color = '';
+    pb.textContent = 'Pause';
+    pb.className = 'btn';
+    pr.style.display = 'none';
   }
 
   // Categories dropdown
@@ -1262,6 +1287,19 @@ async function forceGenerate() {
       const err = await res.json().catch(() => ({}));
       toast(err.error || 'Generation failed', 'error');
     }
+  } catch (e) {
+    toast('Network error', 'error');
+  }
+}
+
+let _workerPaused = false;
+
+async function toggleWorker() {
+  const endpoint = _workerPaused ? '/api/admin/worker/resume' : '/api/admin/worker/pause';
+  try {
+    await fetch(endpoint, { method: 'POST' });
+    _workerPaused = !_workerPaused;
+    poll();
   } catch (e) {
     toast('Network error', 'error');
   }

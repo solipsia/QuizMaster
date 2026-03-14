@@ -77,6 +77,8 @@ class StatusResponse(BaseModel):
     pool_size: int = 0
     pool_target: int = 0
     pool_generating: bool = False
+    pool_paused: bool = False
+    pool_pause_reason: str = ""
     categories: list[str] = []
     difficulty: str = "medium"
     questions_served: int = 0

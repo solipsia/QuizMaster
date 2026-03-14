@@ -12,17 +12,13 @@ from .request_log import RequestLog
 
 logger = logging.getLogger(__name__)
 
-# Minimum seconds between successive generation calls.
-# Free tier Gemini 2.5 Flash is 30 RPM; 3s gives ~20 RPM, safe headroom.
 _MIN_GENERATION_DELAY = 3.0
+_AUTO_PAUSE_AFTER_ERRORS = 3
 
 
 def _parse_retry_after(error_msg: str) -> float | None:
-    """Extract retry delay in seconds from a 429 error message."""
     m = re.search(r"retry in ([\d.]+)s", error_msg, re.IGNORECASE)
-    if m:
-        return float(m.group(1))
-    return None
+    return float(m.group(1)) if m else None
 
 
 class BackfillWorker:
@@ -40,11 +36,35 @@ class BackfillWorker:
         self._task: asyncio.Task | None = None
         self._wake = asyncio.Event()
         self._generating = False
+        self._paused = False
+        self._pause_reason: str = ""
+        self._consecutive_errors = 0
         self._backoff = 2
 
     @property
     def is_generating(self) -> bool:
         return self._generating
+
+    @property
+    def is_paused(self) -> bool:
+        return self._paused
+
+    @property
+    def pause_reason(self) -> str:
+        return self._pause_reason
+
+    def pause(self, reason: str = "Manual") -> None:
+        self._paused = True
+        self._pause_reason = reason
+        logger.info("Worker paused: %s", reason)
+
+    def resume(self) -> None:
+        self._paused = False
+        self._pause_reason = ""
+        self._consecutive_errors = 0
+        self._backoff = 2
+        logger.info("Worker resumed")
+        self._wake.set()
 
     def trigger(self) -> None:
         self._wake.set()
@@ -63,6 +83,16 @@ class BackfillWorker:
     async def _run(self) -> None:
         while True:
             try:
+                # Wait while paused
+                if self._paused:
+                    self._generating = False
+                    self._wake.clear()
+                    try:
+                        await asyncio.wait_for(self._wake.wait(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        pass
+                    continue
+
                 config = self.config_ref[0]
                 if await self.pool.is_below_target(config):
                     self._generating = True
@@ -80,14 +110,21 @@ class BackfillWorker:
                             total_ms=q.generation_time_ms.total,
                             status="ok",
                         ))
-                        # Pace successive generations to respect API rate limits
+                        self._consecutive_errors = 0
                         await asyncio.sleep(_MIN_GENERATION_DELAY)
                         continue
                     except Exception as e:
                         err = str(e)
                         logger.error("Backfill generation failed: %s", err)
+                        self._consecutive_errors += 1
 
-                        # Honour 429 retry-after if present
+                        if self._consecutive_errors >= _AUTO_PAUSE_AFTER_ERRORS:
+                            self.pause(
+                                f"Auto-paused after {self._consecutive_errors} consecutive errors. "
+                                f"Last: {err[:120]}"
+                            )
+                            continue
+
                         if "429" in err:
                             retry_after = _parse_retry_after(err) or 60.0
                             logger.warning("Rate limited — waiting %.0fs", retry_after)

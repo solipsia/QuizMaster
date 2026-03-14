@@ -48,6 +48,8 @@ async def get_status(request: Request):
         pool_size=pool_size,
         pool_target=config.pool.target_size,
         pool_generating=worker.is_generating,
+        pool_paused=worker.is_paused,
+        pool_pause_reason=worker.pause_reason,
         categories=config.quiz.categories,
         difficulty=config.quiz.difficulty,
         questions_served=metrics.questions_served,
@@ -172,6 +174,18 @@ async def force_generate(request: Request, category: str | None = Query(None)):
         return question.model_dump()
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@router.post("/api/admin/worker/pause")
+async def pause_worker(request: Request):
+    request.app.state.worker.pause("Manual")
+    return {"status": "paused"}
+
+
+@router.post("/api/admin/worker/resume")
+async def resume_worker(request: Request):
+    request.app.state.worker.resume()
+    return {"status": "running"}
 
 
 @router.delete("/api/admin/queue")
