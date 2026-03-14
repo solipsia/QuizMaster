@@ -13,8 +13,8 @@ from .request_log import RequestLog
 logger = logging.getLogger(__name__)
 
 # Minimum seconds between successive generation calls.
-# Free tier Gemini is 10-20 RPM; 7s gives ~8 RPM, well within limits.
-_MIN_GENERATION_DELAY = 7.0
+# Free tier Gemini 2.5 Flash is 30 RPM; 3s gives ~20 RPM, safe headroom.
+_MIN_GENERATION_DELAY = 3.0
 
 
 def _parse_retry_after(error_msg: str) -> float | None:
