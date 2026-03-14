@@ -9,6 +9,7 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
       - QUIZ_CONFIG_PATH=/data/config.json
       - QUIZ_AUDIO_DIR=/data/audio
     depends_on:
