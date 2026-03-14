@@ -76,7 +76,14 @@ class PiperTTSClient:
             header_line = await asyncio.wait_for(reader.readline(), timeout=60.0)
             if not header_line:
                 break
-            header = json.loads(header_line.decode())
+            try:
+                header = json.loads(header_line.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as e:
+                raise RuntimeError(
+                    f"Piper returned unexpected data (not Wyoming JSON): "
+                    f"{header_line[:40]!r} — {e}. "
+                    f"Check Piper container logs; it may still be downloading the voice model."
+                ) from e
             data_length = header.get("data_length", 0)
             data = b""
             if data_length > 0:
