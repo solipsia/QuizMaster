@@ -2,15 +2,27 @@ from __future__ import annotations
 
 import asyncio
 import logging
-
-from .generator import QuestionGenerator
-from .models import ServiceConfig
-from .pool import QuestionPool
-from .request_log import RequestLog
-from .models import LogEntry
+import re
 from datetime import datetime, timezone
 
+from .generator import QuestionGenerator
+from .models import LogEntry, ServiceConfig
+from .pool import QuestionPool
+from .request_log import RequestLog
+
 logger = logging.getLogger(__name__)
+
+# Minimum seconds between successive generation calls.
+# Free tier Gemini is 10-20 RPM; 7s gives ~8 RPM, well within limits.
+_MIN_GENERATION_DELAY = 7.0
+
+
+def _parse_retry_after(error_msg: str) -> float | None:
+    """Extract retry delay in seconds from a 429 error message."""
+    m = re.search(r"retry in ([\d.]+)s", error_msg, re.IGNORECASE)
+    if m:
+        return float(m.group(1))
+    return None
 
 
 class BackfillWorker:
@@ -68,17 +80,26 @@ class BackfillWorker:
                             total_ms=q.generation_time_ms.total,
                             status="ok",
                         ))
-                        continue  # Check if more needed immediately
+                        # Pace successive generations to respect API rate limits
+                        await asyncio.sleep(_MIN_GENERATION_DELAY)
+                        continue
                     except Exception as e:
-                        logger.error("Backfill generation failed: %s", e)
-                        self._backoff = min(self._backoff * 2, 60)
-                        await asyncio.sleep(self._backoff)
+                        err = str(e)
+                        logger.error("Backfill generation failed: %s", err)
+
+                        # Honour 429 retry-after if present
+                        if "429" in err:
+                            retry_after = _parse_retry_after(err) or 60.0
+                            logger.warning("Rate limited — waiting %.0fs", retry_after)
+                            await asyncio.sleep(retry_after)
+                        else:
+                            self._backoff = min(self._backoff * 2, 60)
+                            await asyncio.sleep(self._backoff)
                         continue
                     finally:
                         self._generating = False
                 else:
                     self._generating = False
-                    # Wait for trigger or poll interval
                     self._wake.clear()
                     try:
                         await asyncio.wait_for(self._wake.wait(), timeout=5.0)
