@@ -2,15 +2,15 @@
 
 ## Overview
 
-Battery-powered tabletop quiz device built around a Seeed XIAO ESP32-C6. The user presses a button to receive a quiz question read aloud and shown on-screen, then presses again to hear and see the answer. A backend Quiz Service running on a local Synology NAS pre-generates questions using a configurable LLM and Piper TTS so they are available instantly when the device requests one.
+Tabletop quiz device built around an ESP32 DevKitV1 (ELEGOO ESP32-WROOM-32). The user taps the touchscreen to receive a quiz question read aloud and shown on-screen, then taps again to hear and see the answer. A backend Quiz Service running on a local Synology NAS pre-generates questions using a configurable LLM and Piper TTS so they are available instantly when the device requests one.
 
 ## Functional Architecture
 
 ### System Components
 
-1. **QuizMaster device** — XIAO ESP32-C6 with speaker, Sharp Memory Display, and three buttons.
+1. **QuizMaster device** — ESP32 DevKitV1 with speaker, 4" ILI9488 TFT touchscreen display, and USB power.
 2. **Quiz Service** — Web service running on the Synology NAS. Maintains a pool of pre-generated quiz questions. When the device requests a question, it returns one immediately from the pool and backfills asynchronously. Internally calls a configurable LLM API for question generation and Piper TTS for audio synthesis. Also serves the Debug Dashboard and Configuration page.
-3. **Debug Dashboard** — Single-page web UI served by the Quiz Service at `/dashboard`. Mirrors the device quiz flow (same API), shows live queue state, service health, and request logs. Used to test and debug the backend without the C6 hardware.
+3. **Debug Dashboard** — Single-page web UI served by the Quiz Service at `/dashboard`. Mirrors the device quiz flow (same API), shows live queue state, service health, and request logs. Used to test and debug the backend without the hardware.
 4. **Configuration page** — Web UI served at `/config`. All Quiz Service settings (LLM provider, API keys, TTS config, pool size, categories, etc.) are managed here and persisted to a local JSON file.
 5. **Piper TTS** — Text-to-speech engine running on the NAS (Docker). Called by the Quiz Service, not directly by the device.
 6. **LLM API** — Configurable provider (Claude, OpenAI, Ollama, etc.) called by the Quiz Service to generate quiz content. Provider and model are selected in the Configuration page.
@@ -31,23 +31,23 @@ The pool should track which questions have been served to avoid repeats within a
 ### Device State Machine
 
 ```
-[DEEP SLEEP] --Button 1 press--> [WAKE / CONNECT WIFI]
+[IDLE / SPLASH] --Touch "New Question"--> [CONNECT WIFI if needed]
     --> [REQUEST QUESTION from Quiz Service]
     --> [RECEIVE JSON: question text, answer text, audio URLs]
-    --> [DISPLAY question text on Sharp display]
+    --> [DISPLAY question text on TFT]
     --> [STREAM question audio from URL via I2S]
-    --> [IDLE — waiting for user]
-        --Button 2 press--> [DISPLAY answer text]
+    --> [WAITING FOR ANSWER TAP]
+        --Touch "Reveal Answer"--> [DISPLAY answer text]
             --> [STREAM answer audio from URL via I2S]
             --> [PREFETCH next question JSON in background]
-            --> [IDLE]
-        --Button 1 press--> [USE prefetched question, or REQUEST if none ready]
+            --> [WAITING FOR NEXT]
+        --Touch "New Question"--> [USE prefetched question, or REQUEST if none ready]
             --> (repeat cycle)
-        --Timeout (no press for N minutes)--> [AMP OFF] --> [DEEP SLEEP]
-    --Button 3 press--> [Cycle quiz category]
+        --Touch "Category"--> [Cycle quiz category]
+        --Timeout (no touch for N minutes)--> [AMP OFF] --> [DEEP SLEEP]
 ```
 
-**Prefetch strategy**: After the answer is revealed (Button 2), the device fetches the next question's JSON in the background while the user reads the answer. This makes the next Button 1 press feel instant — only audio streaming remains. If the prefetch hasn't completed when Button 1 is pressed, fall back to a synchronous request.
+**Prefetch strategy**: After the answer is revealed, the device fetches the next question's JSON in the background while the user reads the answer. This makes the next "New Question" tap feel instant — only audio streaming remains. If the prefetch hasn't completed when the user taps, fall back to a synchronous request.
 
 ### Quiz Service API
 
@@ -57,7 +57,7 @@ The pool should track which questions have been served to avoid repeats within a
 GET http://<NAS_IP>:<PORT>/api/quiz?category=<CATEGORY>
 ```
 
-The `category` parameter is optional. If omitted, the service picks from all categories. The device cycles the category with Button 3 and displays the current category on screen.
+The `category` parameter is optional. If omitted, the service picks from all categories. The device cycles the category via a touchscreen button and displays the current category on screen.
 
 Response:
 
@@ -80,7 +80,7 @@ GET http://<NAS_IP>:<PORT>/audio/<id>_q.wav
 GET http://<NAS_IP>:<PORT>/audio/<id>_a.wav
 ```
 
-Audio is streamed on demand — question audio immediately after receiving the JSON, answer audio on Button 2 press. Audio is never fully buffered into device RAM (512KB SRAM constraint). The Quiz Service keeps generated audio files available for a reasonable TTL (e.g. 1 hour) before cleanup.
+Audio is streamed on demand — question audio immediately after receiving the JSON, answer audio on "Reveal Answer" tap. The Quiz Service keeps generated audio files available for a reasonable TTL (e.g. 1 hour) before cleanup.
 
 ### Admin API
 
@@ -271,7 +271,7 @@ The dashboard is a single-page technical interface with the following panels:
 
 **Latency Metrics** — Table showing measured performance for every stage of the pipeline: LLM API call, Piper TTS synthesis, total end-to-end generation, and Quiz API response time to the device. Each row shows last, average, min, max, and P95 values over a rolling window. Also shows the current LLM provider/model and Piper connection status. This is the primary tool for identifying bottlenecks — if LLM latency is high, consider a faster model; if Quiz API response is high, the pool may be draining faster than it fills.
 
-**Quiz Player** — Mirrors the device UX using the same `/api/quiz` and `/audio/*` endpoints. Three buttons match the physical device: Get Question (Button 1), Reveal Answer (Button 2), and a category dropdown (Button 3). Shows the current difficulty level. Audio plays through the browser using `<audio>` elements pointed at the audio URLs. Shows the raw JSON response in a collapsible block for debugging.
+**Quiz Player** — Mirrors the device UX using the same `/api/quiz` and `/audio/*` endpoints. Three buttons match the touchscreen UI: Get Question, Reveal Answer, and a category dropdown. Shows the current difficulty level. Audio plays through the browser using `<audio>` elements pointed at the audio URLs. Shows the raw JSON response in a collapsible block for debugging.
 
 **Question Queue** — Table showing every item in the pre-generated pool. Each row shows ID, category, difficulty, truncated question text, status (ready/generating/error), and generation time. Click a row to expand the full question and answer text with inline audio players and per-stage timing breakdown (LLM ms, Piper question ms, Piper answer ms).
 
@@ -357,7 +357,7 @@ Accepts a partial or full config object. Returns the merged result. The Quiz Ser
 | `pool.min_ready` | Minimum ready | Warn on dashboard if pool drops below this | `3` |
 | `pool.backfill_trigger` | Backfill at | Start generating when pool drops to this count | `5` |
 | `pool.audio_ttl_minutes` | Audio TTL | Minutes before unused audio files are cleaned up | `60` |
-| `quiz.categories` | Quiz categories | List of available categories. Device cycles through these with Button 3. | (see default list) |
+| `quiz.categories` | Quiz categories | List of available categories. Device cycles through these via touchscreen. | (see default list) |
 | `quiz.difficulty` | Difficulty level | `easy`, `medium`, or `hard`. Passed to the LLM prompt via `{{difficulty}}` placeholder. | `medium` |
 | `quiz.system_prompt` | LLM prompt | System prompt template for generating Q&A pairs. Supports `{{category}}` and `{{difficulty}}` placeholders that are substituted at generation time. Editable for tuning question style, format, and tone. | (built-in default) |
 | `device.idle_timeout_seconds` | Sleep timeout | Seconds of inactivity before device enters deep sleep | `300` |
@@ -441,94 +441,164 @@ API keys are **never stored in `config.json`**. The config stores only the name 
 
 ### Display Behaviour
 
-- On wake: show "Loading..." or similar status
+- On startup: show splash screen or "Loading..." status
 - After question received: display question text (word-wrapped), category in header
-- After Button 2: replace with answer text
-- After Button 3: cycle category, display new category name, request next question
-- Before deep sleep: show last answer or "Press button to play"
+- After "Reveal Answer" touch: show answer text
+- After "Category" touch: cycle category, display new category name, request next question
+- Before deep sleep: show last answer or "Tap to play"
 - On error: show brief error message (e.g. "No WiFi — retrying...", "Service unavailable")
 
 ## Components
 
 | Component | Part | Notes |
 |---|---|---|
-| MCU | Seeed XIAO ESP32-C6 | RISC-V 160MHz, 512KB SRAM, WiFi 6, onboard LiPo charger |
-| Amplifier | Adafruit MAX98357A I2S breakout | Class D, 3.2W @ 4Ω / 1.8W @ 8Ω at 5V. ~0.5W at 3.3V into 8Ω |
-| Speaker | 8Ω 0.5W | Matched to amp output at 3.3V supply |
-| Display | Sharp Memory Display (SPI) | Ultra-low power, retains image without refresh |
-| Battery | 3.7V 3700mAh LiPo | Connects to XIAO BAT+/BAT− pads for onboard charge management |
+| MCU | ESP32 DevKitV1 (ELEGOO) | ESP32-WROOM-32, Xtensa dual-core 240MHz, 520KB SRAM, WiFi + Bluetooth, CP2102 USB-serial, onboard 3.3V regulator |
+| Amplifier | Adafruit MAX98357A I2S breakout | Class D, 1.8W @ 8Ω at 5V. Powered from 5V rail (MT3608 output) |
+| Speaker | 8Ω 5W, 66mm diameter | Matched to amp; MAX98357A at 5V delivers up to 1.8W into 8Ω |
+| Display | 4" ILI9488 TFT IPS (480×320) with XPT2046 resistive touch | SPI interface, 3.3V/5V, 14-pin header |
+| Power | USB 5V (via DevKitV1 USB-C) | No battery — powered from USB during development |
+| Battery monitor | 2× 100kΩ resistors (voltage divider) | Divides battery voltage (3.0–4.2V) to 1.5–2.1V for ADC1 on GPIO 35 |
 
 ## Pin Assignments
 
-| XIAO Pin | GPIO | Function | Direction | Connected To | Bus |
-|---|---|---|---|---|---|
-| D0 | GPIO0 | Button 2 | Input (pull-up) | Momentary switch to GND | — |
-| D1 | GPIO1 | Button 1 (wake) | Input (pull-up) | Momentary switch to GND | — |
-| D2 | GPIO2 | I2S BCLK | Output | MAX98357A BCLK | I2S |
-| D3 | GPIO3 | I2S LRC (WSEL) | Output | MAX98357A LRC | I2S |
-| D4 | GPIO4 | I2S DIN (DOUT) | Output | MAX98357A DIN | I2S |
-| D5 | GPIO5 | Amp shutdown | Output | MAX98357A SD pin | — |
-| D6 | GPIO6 | Button 3 | Input (pull-up) | Momentary switch to GND | — |
-| D7 | GPIO7 | SPI SCK | Output | Sharp Display SCK | SPI |
-| D8 | GPIO8 | SPI MOSI (SI) | Output | Sharp Display SI | SPI |
-| D9 | GPIO9 | SPI CS | Output | Sharp Display CS | SPI |
-| D10 | GPIO10 | Free | — | — | — |
-| 3V3 | — | Power out | — | MAX98357A VIN, Sharp Display VIN | — |
-| GND | — | Ground | — | All components, button returns | — |
-| BAT+ | — | Battery positive | — | LiPo + terminal | — |
-| BAT− | — | Battery negative | — | LiPo − terminal | — |
+| ESP32 GPIO | Function | Direction | Connected To | Bus |
+|---|---|---|---|---|
+| 25 | I2S BCLK | Output | MAX98357A BCLK | I2S |
+| 26 | I2S LRC (WSEL) | Output | MAX98357A LRC | I2S |
+| 33 | I2S DIN (DOUT) | Output | MAX98357A DIN | I2S |
+| 32 | Amp shutdown | Output | MAX98357A SD pin | — |
+| 23 | SPI MOSI | Output | ILI9488 SDI + XPT2046 T_DIN | SPI (VSPI) |
+| 18 | SPI SCK | Output | ILI9488 SCK + XPT2046 T_CLK | SPI (VSPI) |
+| 19 | SPI MISO | Input | XPT2046 T_DO only | SPI (VSPI) |
+| 15 | Display CS | Output | ILI9488 CS | — |
+| 2 | Display DC/RS | Output | ILI9488 DC | — |
+| 16 | Display RST | Output | ILI9488 RESET | — |
+| 21 | Touch CS | Output | XPT2046 T_CS | — |
+| 4 | Touch IRQ | Input | XPT2046 T_IRQ | — |
+| 35 | Battery voltage ADC | Input | Voltage divider midpoint (100kΩ + 100kΩ from battery) | ADC1_CH7 |
+| 3V3 | Power out | — | ILI9488 VCC, ILI9488 LED | — |
+| GND | Ground | — | All components | — |
+| 5V (VIN) | Power in | — | ESP32 VIN + MAX98357A VIN (from MT3608 via power switch) | — |
 
-## Buttons
+**GPIOs to avoid:** 0 (boot button), 1 (TX0/USB), 3 (RX0/USB), 6–11 (internal flash), 12 (MTDI boot strapping — pulling high prevents boot). GPIOs 34–39 are input-only with no internal pull-ups.
 
-All three buttons are momentary switches wired between the GPIO pin and GND. No external pull-up or pull-down resistors are needed — use the ESP32-C6 internal pull-ups.
-
-| Button | Pin | Function |
-|---|---|---|
-| Button 1 | D1 | New question / wake from deep sleep |
-| Button 2 | D0 | Reveal answer |
-| Button 3 | D6 | Cycle quiz category |
-
-All three pins are valid deep sleep wake sources via `esp_deep_sleep_enable_gpio_wakeup()`. Button 1 on D1 is the designated primary wake button but any combination can be configured as wake sources.
+**Deep sleep wake:** GPIO 4 (touch IRQ) is an RTC GPIO (RTC_GPIO10) and can serve as an `ext0` wake source — a touch on the screen can wake the device from deep sleep.
 
 ## MAX98357A Wiring
 
 | Amp Pin | Connected To | Notes |
 |---|---|---|
-| VIN | XIAO 3V3 | Regulated 3.3V from onboard LDO |
-| GND | XIAO GND | Common ground |
-| BCLK | D2 | I2S bit clock |
-| LRC | D3 | I2S word select (left/right clock) |
-| DIN | D4 | I2S serial data |
-| SD | D5 | Shutdown control. LOW = amp off, HIGH/float = amp on |
-| GAIN | GND | 9dB gain (default on Adafruit breakout). For 6dB: 100kΩ to GND. For 15dB: 100kΩ to VIN |
-| SPK+ | Speaker + | 8Ω 0.5W speaker |
-| SPK− | Speaker − | 8Ω 0.5W speaker |
+| VIN | 5V rail | 5V from MT3608 boost converter (via power switch). Delivers ~1.8W into 8Ω at 5V vs ~0.5W at 3.3V. |
+| GND | ESP32 GND | Common ground |
+| BCLK | GPIO 25 | I2S bit clock |
+| LRC | GPIO 26 | I2S word select (left/right clock) |
+| DIN | GPIO 33 | I2S serial data |
+| SD | GPIO 32 | Shutdown control. LOW = amp off, HIGH/float = amp on |
+| GAIN | Float (NC) | 12dB gain. For 9dB: solder to GND. For 6dB: 100kΩ to GND. For 15dB: 100kΩ to VIN |
+| SPK+ | Speaker + | 8Ω 5W speaker |
+| SPK− | Speaker − | 8Ω 5W speaker |
 
-The Adafruit breakout has a 1MΩ internal pull-up on SD, so the amp is enabled by default. Drive D5 LOW before entering deep sleep to cut amp quiescent current.
+The Adafruit breakout has a 1MΩ internal pull-up on SD, so the amp is enabled by default. Drive GPIO 32 LOW before entering deep sleep to cut amp quiescent current.
 
-## Sharp Memory Display Wiring
+## ILI9488 Display + XPT2046 Touch Wiring
 
 | Display Pin | Connected To | Notes |
 |---|---|---|
-| VIN | XIAO 3V3 | 3.3V supply |
-| GND | XIAO GND | Common ground |
-| SCK | D7 | SPI clock |
-| SI | D8 | SPI data in (MOSI) |
-| CS | D9 | SPI chip select |
+| VCC | ESP32 3V3 | 3.3V supply (module has onboard regulator, accepts 3.3V or 5V) |
+| GND | ESP32 GND | Common ground |
+| CS | GPIO 15 | LCD chip select (active low) |
+| RESET | GPIO 16 | LCD reset (active low) |
+| DC/RS | GPIO 2 | Data/Command select. Note: GPIO 2 also drives the ESP32 onboard LED — it will flicker during SPI transactions (harmless) |
+| SDI (MOSI) | GPIO 23 | SPI data in (shared with touch) |
+| SCK | GPIO 18 | SPI clock (shared with touch) |
+| LED | ESP32 3V3 | Backlight always on. Can connect to a GPIO for PWM brightness control. |
+| SDO (MISO) | **DO NOT CONNECT** | ILI9488 SDO does not tristate when CS is high — it will interfere with the XPT2046 touch controller on the shared SPI bus. Leave disconnected. |
+| T_CLK | GPIO 18 | Touch SPI clock (shared with display SCK) |
+| T_CS | GPIO 21 | Touch chip select (active low) |
+| T_DIN | GPIO 23 | Touch SPI data in (shared with display MOSI) |
+| T_DO | GPIO 19 | Touch SPI data out — this is the ONLY device connected to MISO |
+| T_IRQ | GPIO 4 | Touch interrupt (low when touch detected). RTC_GPIO10 — can wake from deep sleep. |
 
-The display retains its image contents without continuous refresh. The Adafruit Sharp Memory Display breakout includes a VCOM hardware oscillator, so no software VCOM toggling is needed. If using a bare Sharp display without the Adafruit breakout, software VCOM toggling via a periodic CS pulse will be required.
+## Battery Voltage Monitoring
+
+A resistive voltage divider allows the ESP32 to measure the Li-ion battery voltage via its ADC.
+
+### Circuit
+
+```
+Battery B+ (3.0–4.2V)
+    │
+   [R1: 100kΩ]
+    │
+    ├──── GPIO 35 (ADC1_CH7)
+    │
+   [R2: 100kΩ]
+    │
+   GND
+```
+
+### Design Rationale
+
+- **Voltage divider ratio**: 1:2 — `Vadc = Vbat × R2 / (R1 + R2) = Vbat / 2`
+- **ADC range**: At 4.2V (full charge) the ADC sees 2.1V; at 3.0V (empty) it sees 1.5V — well within the ESP32 ADC's 0–3.3V range with 11dB attenuation
+- **GPIO 35**: Input-only pin on ADC1 (channels on ADC1 work while WiFi is active; ADC2 channels do not). Currently unused.
+- **Divider impedance**: 200kΩ total, drawing only ~21µA from the battery at full charge — negligible drain
+- **Tap point**: Connect R1 to the battery B+ terminal (TP4056 B+ pad / battery positive), not after the boost converter — this reads the true cell voltage regardless of the MT3608 output
+- **No extra capacitor needed**: The ESP32 ADC input has internal sample-and-hold; the 100kΩ source impedance is acceptable for the default 12-bit ADC at moderate sample rates
+
+### Firmware Notes
+
+- Use `analogReadMilliVolts(35)` (Arduino) or `adc1_get_raw(ADC1_CHANNEL_7)` (ESP-IDF) to read the ADC
+- Multiply the reading by 2 to recover the actual battery voltage: `Vbat = Vadc × 2`
+- For better accuracy, calibrate against a multimeter reading and apply a linear correction factor
+- Sample periodically (e.g. every 30s) and display a battery icon/percentage on the TFT
+- Typical Li-ion thresholds: 4.2V = 100%, 3.7V = ~50%, 3.3V = ~10%, 3.0V = empty (shut down)
+
+### TFT_eSPI Library Configuration
+
+The display uses the **TFT_eSPI** library by Bodmer. Create/edit `User_Setup.h` in the TFT_eSPI library folder:
+
+```cpp
+#define ILI9488_DRIVER
+
+#define TFT_MISO  19
+#define TFT_MOSI  23
+#define TFT_SCLK  18
+#define TFT_CS    15
+#define TFT_DC     2
+#define TFT_RST   16
+
+#define TOUCH_CS  21
+
+#define LOAD_GLCD
+#define LOAD_FONT2
+#define LOAD_FONT4
+#define LOAD_FONT6
+#define LOAD_FONT7
+#define LOAD_FONT8
+#define LOAD_GFXFF
+#define SMOOTH_FONT
+
+#define SPI_FREQUENCY       27000000   // 27 MHz — safe max for ILI9488
+#define SPI_READ_FREQUENCY  16000000
+#define SPI_TOUCH_FREQUENCY  2500000   // 2.5 MHz for XPT2046
+```
+
+**Important notes:**
+- 27 MHz SPI is the reliable maximum for ILI9488. 40 MHz may cause visual artifacts. 80 MHz is too fast.
+- ILI9488 over SPI uses 18-bit colour (not 16-bit like ILI9341), so DMA is not supported in TFT_eSPI and rendering is somewhat slower.
+- Touch calibration is required after wiring — run the TFT_eSPI `Touch_calibrate` example sketch to get calibration values for your specific display and orientation.
+- XPT2046 touch SPI must run at 2.5 MHz (max spec).
 
 ## Power Budget
 
 | State | Current Draw | Notes |
 |---|---|---|
-| Deep sleep (total) | ~25–30µA | ESP32-C6 ~7µA + Sharp display ~15µA + amp shutdown ~0µA |
-| Active burst (total) | ~180–200mA | WiFi TX/RX ~100–130mA + amp playing speech ~50–80mA + display ~15µA |
-| Active burst duration | ~3–5s | WiFi connect + JSON fetch from pre-generated pool + WAV stream + playback |
+| Deep sleep (total) | ~30–35µA | ESP32 ~10µA + voltage divider ~21µA (no display backlight in sleep) |
+| Active idle (display on, WiFi connected) | ~120–180mA | ESP32 active + display backlight + WiFi |
+| Active burst (audio playing) | ~300–450mA | WiFi + amp playing speech (~150–250mA at 5V into 8Ω) + display |
 
-With pre-generated questions, the Quiz Service responds in <100ms. The active burst is dominated by WiFi connect (~1s on first wake) and audio streaming/playback (~2–4s per clip).
-
-Estimated battery life at one question every 2 minutes (active quiz session): **~4–5 days** on 3700mAh. Actual life depends heavily on session frequency and duration.
+The device is USB-powered during development. Battery operation is not currently planned but could be added later — the ESP32 DevKitV1's onboard CP2102 and voltage regulator draw ~10–20mA even in deep sleep, making it unsuitable for ultra-low-power battery use without hardware modifications.
 
 ## I2S Configuration
 
@@ -545,11 +615,11 @@ The MAX98357A automatically sums stereo to mono if a stereo stream is sent, but 
 
 ## Software Architecture Notes
 
-- **Quiz flow**: Device sends HTTP GET to Quiz Service → receives JSON with text + audio URLs → displays question text → streams question audio from URL via I2S → waits for Button 2 → streams answer audio → prefetches next question JSON.
-- **Audio pipeline**: The ESP8266Audio library provides `AudioFileSourceHTTPStream` → `AudioGeneratorWAV` → `AudioOutputI2S` as a ready-made streaming chain. Audio is streamed directly from the Quiz Service URLs, not buffered into RAM. Note: ESP8266Audio's ESP32-C6 (RISC-V) support should be verified — if incompatible, use the ESP-IDF I2S driver directly with an HTTP stream reader.
-- **Deep sleep cycle**: After idle timeout, drive D5 LOW (amp off), then enter deep sleep with GPIO wake on button pins.
-- **Display updates**: Write question/answer text to Sharp display during active use. Display retains content through deep sleep independently.
-- **WiFi strategy**: Full modem sleep in deep sleep. Cold connect on wake. Keep WiFi active during a quiz session (between question and answer) to avoid reconnection overhead. Use `esp_wifi_set_ps(WIFI_PS_MIN_MODEM)` during active periods.
+- **Quiz flow**: Device sends HTTP GET to Quiz Service → receives JSON with text + audio URLs → displays question text on TFT → streams question audio from URL via I2S → waits for touch → streams answer audio → prefetches next question JSON.
+- **Audio pipeline**: Audio is streamed directly from the Quiz Service URLs via HTTP, not buffered into RAM. WAV headers are parsed to configure I2S sample rate dynamically. See `firmware/quiz_test/quiz_test.ino` for the working streaming implementation.
+- **Deep sleep cycle**: After idle timeout, drive GPIO 32 LOW (amp off), turn off display backlight, then enter deep sleep with touch IRQ (GPIO 4) as wake source.
+- **Display updates**: Write question/answer text to ILI9488 TFT via TFT_eSPI library. Touch input via XPT2046 replaces physical buttons.
+- **WiFi strategy**: Full modem sleep in deep sleep. Cold connect on wake. Keep WiFi active during a quiz session to avoid reconnection overhead. Use `esp_wifi_set_ps(WIFI_PS_MIN_MODEM)` during active periods.
 - **Quiz Service endpoint**: `http://<NAS_IP>:<PORT>/api/quiz?category=<CATEGORY>` — returns JSON with text and audio URLs. The Quiz Service internally manages a pre-generated question pool, the configured LLM API, and Piper TTS (default Piper Docker port 10200).
 
 ## Error Handling
@@ -558,11 +628,11 @@ The device operates on an unreliable wireless link and depends on external servi
 
 | Scenario | Device Behaviour |
 |---|---|
-| WiFi connect fails | Display "No WiFi". Retry 3 times with 2s backoff. If still failing, display "No WiFi — press button to retry" and wait for Button 1. |
-| Quiz Service unreachable | Display "Service unavailable". Retry once. If still failing, show message and wait for Button 1. |
-| Quiz Service returns error (5xx, empty pool) | Display "No questions available — try again shortly". Wait for Button 1. |
-| Audio stream fails mid-playback | Stop playback. Display question/answer text remains visible (user can still read it). No retry — user presses Button 1 for next question. |
-| Audio stream fails before playback starts | Display text normally (text is already available from JSON). Show "(audio unavailable)" on display. |
+| WiFi connect fails | Display "No WiFi" on TFT. Retry 3 times with 2s backoff. If still failing, display "No WiFi — tap to retry" and wait for touch. |
+| Quiz Service unreachable | Display "Service unavailable". Retry once. If still failing, show message and wait for touch. |
+| Quiz Service returns error (5xx, empty pool) | Display "No questions available — try again shortly". Wait for touch. |
+| Audio stream fails mid-playback | Stop playback. Question/answer text remains visible on TFT (user can still read it). No retry — user taps for next question. |
+| Audio stream fails before playback starts | Display text normally (text is already available from JSON). Show "(audio unavailable)" on TFT. |
 | Idle timeout during error state | Enter deep sleep normally. |
 
 **Design principle**: Never hang silently. Always show status on the display so the user knows what's happening. Text is more resilient than audio — if the JSON was received, the question/answer text can always be displayed even if audio fails.

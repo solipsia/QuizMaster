@@ -95,9 +95,67 @@ Both pages are single self-contained HTML files with inline CSS and JS. No build
 - Named volume `quiz-data` persists: audio files, voice models, config.json
 - Port mapping: `8080:8000`
 
+## Firmware (ESP32 DevKitV1)
+
+MCU is the ELEGOO ESP32 DevKitV1 (ESP32-WROOM-32, Xtensa dual-core, CP2102 USB-serial). Test sketches live in `firmware/`. Flash with arduino-cli:
+```
+arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 firmware/<sketch>
+arduino-cli upload  --fqbn esp32:esp32:esp32doit-devkit-v1 --port COM21 firmware/<sketch>
+```
+
+### ESP32 DevKitV1 Pin Assignments
+
+On the standard ESP32, GPIO numbers match directly — no D-pin mapping indirection. Use raw GPIO numbers in firmware code.
+
+| GPIO | Function | Connected To |
+|---|---|---|
+| 25 | I2S BCLK | MAX98357A BCLK |
+| 26 | I2S LRC (WSEL) | MAX98357A LRC |
+| 33 | I2S DIN (DOUT) | MAX98357A DIN |
+| 32 | Amp shutdown | MAX98357A SD pin |
+| 23 | SPI MOSI | ILI9488 SDI + XPT2046 T_DIN |
+| 18 | SPI SCK | ILI9488 SCK + XPT2046 T_CLK |
+| 19 | SPI MISO | XPT2046 T_DO only (display SDO disconnected) |
+| 15 | Display CS | ILI9488 CS |
+| 2 | Display DC/RS | ILI9488 DC |
+| 16 | Display RST | ILI9488 RESET |
+| 21 | Touch CS | XPT2046 T_CS |
+| 4 | Touch IRQ | XPT2046 T_IRQ (RTC GPIO — deep sleep wake source) |
+| 35 | Battery voltage ADC | Voltage divider midpoint (100kΩ + 100kΩ from battery B+) |
+
+**No physical buttons** — all user input via XPT2046 resistive touchscreen.
+
+**GPIOs to avoid on ESP32 DevKitV1:** 0 (boot), 1 (TX0), 3 (RX0), 6–11 (flash), 12 (boot strapping). GPIOs 34–39 are input-only with no internal pull-ups.
+
+**Deep sleep wake:** GPIO 4 (touch IRQ) is an RTC GPIO (RTC_GPIO10) and can serve as an `ext0` wake source — a screen touch can wake the device.
+
+### Display: ILI9488 4" TFT (480×320, SPI) with XPT2046 Touch
+
+- Library: **TFT_eSPI** by Bodmer. Configure in `User_Setup.h` (see TechnicalDesign.md for settings).
+- **Critical:** Do NOT connect the display's SDO/MISO pin — it doesn't tristate and will interfere with the touch controller on the shared SPI bus. Only connect XPT2046 T_DO to GPIO 19.
+- ILI9488 over SPI uses 18-bit colour (not 16-bit like ILI9341) — no DMA support in TFT_eSPI, somewhat slower rendering.
+- Backlight (LED pin): tie to 3V3 for always-on, or connect to a GPIO for PWM brightness control.
+- SPI clock: 27 MHz is the safe maximum for ILI9488 (40 MHz may cause artifacts).
+
+### I2S — use ESP-IDF 5.x API
+Use `driver/i2s_std.h` (same API as before):
+- `i2s_new_channel` / `i2s_channel_init_std_mode` / `i2s_channel_enable`
+- `I2S_STD_MSB_SLOT_DEFAULT_CONFIG` works with MAX98357A
+- See `firmware/speaker_test/speaker_test.ino` for working reference
+
+### Quiz API response shape
+`GET /api/quiz` returns:
+```json
+{ "id": "...", "question_text": "...", "answer_text": "...",
+  "question_audio_url": "http://synology.local:8080/audio/....wav",
+  "answer_audio_url":   "http://synology.local:8080/audio/....wav" }
+```
+Audio URLs are fully qualified — do not prepend the base URL.
+
 ## Known Issues & Gotchas
 
 - **New API key env vars**: Adding a new LLM provider requires adding its key to `docker-compose.yml` environment section AND redeploying — Portainer env vars alone are not enough
 - **config.json on volume wins**: If something is broken in config, fix it via the `/config` page and save, or shell into the container and edit `/data/config.json` directly
 - **Google AI intermittent 400 "API key expired"**: Usually resolves itself; also try stripping whitespace from the key. Confirmed fixed by adding `api_key.strip()` in `llm/google.py`
 - **piper-tts first run**: The voice model download (from HuggingFace) happens on first synthesis call, not on startup — expect a long delay on the first question after a fresh deploy
+- **ILI9488 display SDO/MISO**: Never connect the display's SDO pin to the SPI bus — it doesn't tristate when CS is high and will corrupt touch controller reads. Leave it disconnected.
