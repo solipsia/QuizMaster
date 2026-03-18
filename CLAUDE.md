@@ -136,6 +136,7 @@ On the standard ESP32, GPIO numbers match directly — no D-pin mapping indirect
 - ILI9488 over SPI uses 18-bit colour (not 16-bit like ILI9341) — no DMA support in TFT_eSPI, somewhat slower rendering.
 - Backlight (LED pin): tie to 3V3 for always-on, or connect to a GPIO for PWM brightness control.
 - SPI clock: 27 MHz is the safe maximum for ILI9488 (40 MHz may cause artifacts).
+- **Touch Y-axis is inverted**: With rotation 1 (landscape), `tft.getTouch()` returns Y values flipped. Apply `ty = tft.height() - 1 - ty` after reading. Calibration data: `{ 300, 3600, 300, 3600, 3 }`.
 
 ### I2S — use ESP-IDF 5.x API
 Use `driver/i2s_std.h` (same API as before):
