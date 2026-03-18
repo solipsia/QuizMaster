@@ -78,12 +78,14 @@ class SpendEntry(BaseModel):
     api_calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
+    estimated_cost_usd: Optional[float] = None
 
 
 class SpendAnalytics(BaseModel):
     total_api_calls: int = 0
     total_input_tokens: int = 0
     total_output_tokens: int = 0
+    total_estimated_cost_usd: Optional[float] = None
     by_model: list[SpendEntry] = []
 
 

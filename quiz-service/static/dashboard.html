@@ -865,18 +865,22 @@ audio::-webkit-media-controls-panel { border-radius: 4px; }
       <span style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-dim);">Since service start</span>
     </div>
     <div class="panel-body" style="padding:0;">
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-bottom:1px solid var(--border);">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--border);">
         <div style="padding:14px 16px;text-align:center;">
           <div style="font-family:var(--font-mono);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:4px;">API Calls</div>
           <div style="font-family:var(--font-mono);font-size:1.3rem;font-weight:600;color:var(--text-primary);" id="spendTotalCalls">0</div>
         </div>
-        <div style="padding:14px 16px;text-align:center;border-left:1px solid var(--border);border-right:1px solid var(--border);">
+        <div style="padding:14px 16px;text-align:center;border-left:1px solid var(--border);">
           <div style="font-family:var(--font-mono);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:4px;">Input Tokens</div>
           <div style="font-family:var(--font-mono);font-size:1.3rem;font-weight:600;color:var(--cyan);" id="spendTotalInput">0</div>
         </div>
-        <div style="padding:14px 16px;text-align:center;">
+        <div style="padding:14px 16px;text-align:center;border-left:1px solid var(--border);">
           <div style="font-family:var(--font-mono);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:4px;">Output Tokens</div>
           <div style="font-family:var(--font-mono);font-size:1.3rem;font-weight:600;color:var(--green);" id="spendTotalOutput">0</div>
+        </div>
+        <div style="padding:14px 16px;text-align:center;border-left:1px solid var(--border);">
+          <div style="font-family:var(--font-mono);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:4px;">Est. Cost</div>
+          <div style="font-family:var(--font-mono);font-size:1.3rem;font-weight:600;color:var(--yellow);" id="spendTotalCost">—</div>
         </div>
       </div>
       <div class="table-wrap">
@@ -889,10 +893,11 @@ audio::-webkit-media-controls-panel { border-radius: 4px; }
               <th>Input Tokens</th>
               <th>Output Tokens</th>
               <th>Total Tokens</th>
+              <th>Est. Cost</th>
             </tr>
           </thead>
           <tbody id="spendBody">
-            <tr><td colspan="6" style="color:var(--text-dim);text-align:center;padding:20px;">No API calls yet</td></tr>
+            <tr><td colspan="7" style="color:var(--text-dim);text-align:center;padding:20px;">No API calls yet</td></tr>
           </tbody>
         </table>
       </div>
@@ -1165,15 +1170,24 @@ function fmtTokens(n) {
   return String(n);
 }
 
+function fmtCost(usd) {
+  if (usd == null) return '—';
+  if (usd === 0) return '$0.00';
+  if (usd < 0.01) return '$' + usd.toFixed(4);
+  if (usd < 1) return '$' + usd.toFixed(3);
+  return '$' + usd.toFixed(2);
+}
+
 function renderSpend(spend) {
   if (!spend) return;
   document.getElementById('spendTotalCalls').textContent = spend.total_api_calls || 0;
   document.getElementById('spendTotalInput').textContent = fmtTokens(spend.total_input_tokens);
   document.getElementById('spendTotalOutput').textContent = fmtTokens(spend.total_output_tokens);
+  document.getElementById('spendTotalCost').textContent = fmtCost(spend.total_estimated_cost_usd);
 
   const entries = spend.by_model || [];
   if (!entries.length) {
-    document.getElementById('spendBody').innerHTML = '<tr><td colspan="6" style="color:var(--text-dim);text-align:center;padding:20px;">No API calls yet</td></tr>';
+    document.getElementById('spendBody').innerHTML = '<tr><td colspan="7" style="color:var(--text-dim);text-align:center;padding:20px;">No API calls yet</td></tr>';
     return;
   }
 
@@ -1186,6 +1200,7 @@ function renderSpend(spend) {
       '<td class="mono-val" style="color:var(--cyan)">' + fmtTokens(e.input_tokens) + '</td>' +
       '<td class="mono-val" style="color:var(--green)">' + fmtTokens(e.output_tokens) + '</td>' +
       '<td class="mono-val">' + fmtTokens(total) + '</td>' +
+      '<td class="mono-val" style="color:var(--yellow)">' + fmtCost(e.estimated_cost_usd) + '</td>' +
       '</tr>';
   }).join('');
 

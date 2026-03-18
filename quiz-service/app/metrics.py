@@ -5,6 +5,7 @@ from collections import deque
 from datetime import datetime, timezone
 
 from .models import ErrorInfo, ErrorSummary, LatencyStats, SpendAnalytics, SpendEntry
+from .pricing import get_token_pricing
 
 
 class LatencyTracker:
@@ -71,21 +72,41 @@ class MetricsCollector:
         total_calls = 0
         total_in = 0
         total_out = 0
+        total_cost = 0.0
+        has_pricing = False
+
         for (provider, model), data in self._spend.items():
+            input_tokens = data["input_tokens"]
+            output_tokens = data["output_tokens"]
+
+            pricing = get_token_pricing(model)
+            cost = None
+            if pricing:
+                cost = round(
+                    (input_tokens / 1_000_000) * pricing[0]
+                    + (output_tokens / 1_000_000) * pricing[1],
+                    6,
+                )
+                total_cost += cost
+                has_pricing = True
+
             entries.append(SpendEntry(
                 provider=provider,
                 model=model,
                 api_calls=data["api_calls"],
-                input_tokens=data["input_tokens"],
-                output_tokens=data["output_tokens"],
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                estimated_cost_usd=cost,
             ))
             total_calls += data["api_calls"]
-            total_in += data["input_tokens"]
-            total_out += data["output_tokens"]
+            total_in += input_tokens
+            total_out += output_tokens
+
         return SpendAnalytics(
             total_api_calls=total_calls,
             total_input_tokens=total_in,
             total_output_tokens=total_out,
+            total_estimated_cost_usd=round(total_cost, 6) if has_pricing else None,
             by_model=entries,
         )
 
