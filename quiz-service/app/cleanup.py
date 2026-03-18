@@ -27,7 +27,7 @@ async def audio_cleanup_loop(
                 referenced_files.add(f"{q['id']}_a.wav")
 
             for f in audio_dir.glob("*.wav"):
-                if f.name in referenced_files:
+                if f.name in referenced_files or f.stem == "welcome":
                     continue
                 if f.stat().st_mtime < cutoff:
                     f.unlink(missing_ok=True)

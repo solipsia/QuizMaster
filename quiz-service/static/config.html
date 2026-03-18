@@ -874,6 +874,11 @@ textarea {
       <span class="panel-title">Device</span>
     </div>
     <div class="panel-body">
+      <div class="field">
+        <label>Splash Screen Voice</label>
+        <input type="text" id="welcomeText" placeholder="Welcome to Quiz Master">
+        <span class="hint">Text spoken aloud when the device powers on</span>
+      </div>
       <div class="field" style="max-width: 300px;">
         <label>Idle Timeout</label>
         <div class="input-with-suffix">
@@ -1029,6 +1034,7 @@ function populateForm(cfg) {
   document.getElementById('audioTtl').value = cfg.pool?.audio_ttl_minutes ?? 60;
 
   // Device
+  document.getElementById('welcomeText').value = cfg.device?.welcome_text || 'Welcome to Quiz Master';
   document.getElementById('idleTimeout').value = cfg.device?.idle_timeout_seconds ?? 300;
 
   // Piper status — check on load
@@ -1089,6 +1095,7 @@ async function saveConfig() {
       system_prompt: document.getElementById('systemPrompt').value
     },
     device: {
+      welcome_text: document.getElementById('welcomeText').value || 'Welcome to Quiz Master',
       idle_timeout_seconds: parseInt(document.getElementById('idleTimeout').value) || 300
     }
   };

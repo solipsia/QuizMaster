@@ -205,6 +205,46 @@ async def get_config(request: Request):
     return data
 
 
+@router.get("/api/device/welcome")
+async def get_welcome(request: Request):
+    """Return welcome audio for the splash screen.
+
+    Synthesizes TTS on first call or when the text changes.
+    The audio is cached as welcome.wav in the audio directory.
+    """
+    state = request.app.state
+    config = state.config_ref[0]
+    tts_client = state.tts_client
+    audio_dir: Path = state.audio_dir
+
+    text = config.device.welcome_text
+    audio_path = audio_dir / "welcome.wav"
+    text_path = audio_dir / "welcome.txt"
+
+    # Regenerate if text changed or file missing
+    need_gen = not audio_path.exists()
+    if not need_gen:
+        try:
+            cached_text = text_path.read_text(encoding="utf-8").strip()
+            if cached_text != text:
+                need_gen = True
+        except FileNotFoundError:
+            need_gen = True
+
+    if need_gen:
+        try:
+            await tts_client.synthesize(text, audio_path)
+            text_path.write_text(text, encoding="utf-8")
+        except Exception as e:
+            return JSONResponse(status_code=500, content={"error": f"TTS failed: {e}"})
+
+    base = str(request.base_url).rstrip("/")
+    return {
+        "text": text,
+        "audio_url": f"{base}/audio/welcome.wav",
+    }
+
+
 @router.put("/api/admin/config")
 async def update_config(request: Request):
     state = request.app.state

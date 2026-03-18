@@ -137,6 +137,7 @@ class QuizConfig(BaseModel):
 
 class DeviceConfig(BaseModel):
     idle_timeout_seconds: int = 300
+    welcome_text: str = "Welcome to Quiz Master"
 
 
 class ServiceConfig(BaseModel):

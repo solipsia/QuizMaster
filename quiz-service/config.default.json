@@ -25,6 +25,7 @@
     "system_prompt": "You are a quiz master. Generate a trivia question and answer. The category is {{category}} and the difficulty level is {{difficulty}}. Return JSON with 'question' and 'answer' fields."
   },
   "device": {
-    "idle_timeout_seconds": 300
+    "idle_timeout_seconds": 300,
+    "welcome_text": "Welcome to Quiz Master"
   }
 }
