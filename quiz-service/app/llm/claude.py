@@ -33,7 +33,12 @@ class ClaudeClient(LLMClient):
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
+            if not resp.is_success:
+                try:
+                    detail = resp.json().get("error", {}).get("message", resp.text)
+                except Exception:
+                    detail = resp.text
+                raise RuntimeError(f"Claude {resp.status_code}: {detail}")
 
         data = resp.json()
         usage = data.get("usage", {})
