@@ -38,7 +38,7 @@ async def get_quiz(
 
     response_ms = int((time.time() - start) * 1000)
     metrics.api_quiz_response.record(response_ms)
-    metrics.questions_served += 1
+    metrics.record_question_served()
 
     request_log.add(LogEntry(
         timestamp=datetime.now(timezone.utc).isoformat(),

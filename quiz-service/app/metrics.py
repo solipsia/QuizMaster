@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import json
+import logging
 import time
 from collections import deque
 from datetime import datetime, timezone
+from pathlib import Path
 
 from .models import ErrorInfo, ErrorSummary, LatencyStats, SpendAnalytics, SpendEntry
 from .pricing import get_token_pricing
+
+logger = logging.getLogger(__name__)
 
 
 class LatencyTracker:
@@ -33,7 +38,7 @@ class LatencyTracker:
 
 
 class MetricsCollector:
-    def __init__(self):
+    def __init__(self, data_dir: Path | None = None):
         self.llm = LatencyTracker()
         self.piper_tts = LatencyTracker()
         self.total_generation = LatencyTracker()
@@ -44,10 +49,16 @@ class MetricsCollector:
         self._error_timestamps: deque[float] = deque(maxlen=500)
         self._last_error: ErrorInfo | None = None
         self._spend: dict[tuple[str, str], dict] = {}
+        self._spend_path: Path | None = data_dir / "spend.json" if data_dir else None
+        self._load_spend()
 
     @property
     def uptime_seconds(self) -> int:
         return int(time.time() - self.start_time)
+
+    def record_question_served(self) -> None:
+        self.questions_served += 1
+        self._save_spend()
 
     def record_error(self, stage: str, message: str) -> None:
         now = time.time()
@@ -59,6 +70,44 @@ class MetricsCollector:
             message=message,
         )
 
+    def _load_spend(self) -> None:
+        if not self._spend_path or not self._spend_path.exists():
+            return
+        try:
+            data = json.loads(self._spend_path.read_text(encoding="utf-8"))
+            self.questions_served = data.get("questions_served", 0)
+            for entry in data.get("spend", []):
+                key = (entry["provider"], entry["model"])
+                self._spend[key] = {
+                    "api_calls": entry.get("api_calls", 0),
+                    "input_tokens": entry.get("input_tokens", 0),
+                    "output_tokens": entry.get("output_tokens", 0),
+                }
+            logger.info("Loaded spend data: %d models, %d questions served",
+                        len(self._spend), self.questions_served)
+        except Exception as e:
+            logger.warning("Failed to load spend data: %s", e)
+
+    def _save_spend(self) -> None:
+        if not self._spend_path:
+            return
+        try:
+            entries = []
+            for (provider, model), d in self._spend.items():
+                entries.append({
+                    "provider": provider,
+                    "model": model,
+                    "api_calls": d["api_calls"],
+                    "input_tokens": d["input_tokens"],
+                    "output_tokens": d["output_tokens"],
+                })
+            data = {"questions_served": self.questions_served, "spend": entries}
+            tmp = self._spend_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            tmp.replace(self._spend_path)
+        except Exception as e:
+            logger.warning("Failed to save spend data: %s", e)
+
     def record_spend(self, provider: str, model: str, input_tokens: int, output_tokens: int) -> None:
         key = (provider, model)
         if key not in self._spend:
@@ -66,6 +115,7 @@ class MetricsCollector:
         self._spend[key]["api_calls"] += 1
         self._spend[key]["input_tokens"] += input_tokens
         self._spend[key]["output_tokens"] += output_tokens
+        self._save_spend()
 
     def spend_analytics(self) -> SpendAnalytics:
         entries = []

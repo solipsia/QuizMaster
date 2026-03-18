@@ -36,7 +36,8 @@ async def lifespan(app: FastAPI):
     audio_dir.mkdir(parents=True, exist_ok=True)
 
     # Core components
-    metrics = MetricsCollector()
+    data_dir = audio_dir.parent  # /data
+    metrics = MetricsCollector(data_dir=data_dir)
     request_log = RequestLog()
     pool = QuestionPool(audio_dir)
 
