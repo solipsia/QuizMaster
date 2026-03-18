@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .cleanup import audio_cleanup_loop
 from .config import get_api_key, load_config
+from .pricing import set_overrides
 from .generator import QuestionGenerator
 from .llm.base import create_llm_client
 from .metrics import MetricsCollector
@@ -28,6 +29,7 @@ async def lifespan(app: FastAPI):
     # Load config
     config = load_config()
     config_ref = [config]  # Mutable ref for hot-reload
+    set_overrides(config.pricing)
 
     # Audio directory
     audio_dir = Path(os.environ.get("QUIZ_AUDIO_DIR", "data/audio"))

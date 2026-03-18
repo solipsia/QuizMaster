@@ -164,3 +164,4 @@ class ServiceConfig(BaseModel):
     pool: PoolConfig = PoolConfig()
     quiz: QuizConfig = QuizConfig()
     device: DeviceConfig = DeviceConfig()
+    pricing: dict[str, list[float]] = {}  # model -> [input_per_mtok, output_per_mtok]

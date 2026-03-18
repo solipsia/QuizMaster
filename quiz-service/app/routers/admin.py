@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from ..config import check_api_key_set, get_api_key, merge_config_update, save_config
 from ..llm.base import create_llm_client
+from ..pricing import get_all_pricing, set_overrides
 from ..models import (
     LatencyMetrics,
     LLMStatus,
@@ -284,6 +285,12 @@ async def get_config(request: Request):
     return data
 
 
+@router.get("/api/admin/pricing")
+async def get_pricing():
+    """Return the full merged pricing table (defaults + user overrides)."""
+    return {"models": get_all_pricing()}
+
+
 @router.get("/api/device/welcome")
 async def get_welcome(request: Request):
     """Return welcome audio for the splash screen.
@@ -341,6 +348,9 @@ async def update_config(request: Request):
 
     save_config(new_config)
     state.config_ref[0] = new_config
+
+    # Update pricing overrides
+    set_overrides(new_config.pricing)
 
     # Rebuild LLM client if provider/model changed
     new_llm = new_config.llm.model_dump()
