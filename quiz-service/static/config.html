@@ -1448,7 +1448,7 @@ function useModel(name) {
 }
 
 // ─── PRICING TABLE ───
-let pricingData = []; // [{model, input_per_mtok, output_per_mtok}]
+let pricingData = []; // [{model, input_per_mtok, output_per_mtok, provider}]
 
 async function loadPricing() {
   try {
@@ -1461,14 +1461,8 @@ async function loadPricing() {
   } catch (e) { /* ignore */ }
 }
 
-function renderPricing() {
-  const tbody = document.getElementById('pricingBody');
-  if (!pricingData.length) {
-    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--text-dim);text-align:center;padding:16px;">No pricing data</td></tr>';
-    return;
-  }
-  tbody.innerHTML = pricingData.map((p, i) =>
-    '<tr>' +
+function pricingRow(p, i) {
+  return '<tr>' +
     '<td style="padding:6px 12px;border-bottom:1px solid var(--border);">' +
       '<input type="text" value="' + (p.model || '') + '" ' +
         'style="font-family:var(--font-mono);font-size:0.78rem;padding:4px 8px;background:var(--bg-input);border:1px solid var(--border);border-radius:3px;color:var(--text-primary);width:100%;outline:none;" ' +
@@ -1488,8 +1482,30 @@ function renderPricing() {
       '<button onclick="removePricingRow(' + i + ')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:0.8rem;padding:2px 6px;" ' +
         'onmouseover="this.style.color=\'var(--red)\'" onmouseout="this.style.color=\'var(--text-dim)\'">&times;</button>' +
     '</td>' +
-    '</tr>'
-  ).join('');
+    '</tr>';
+}
+
+function renderPricing() {
+  const tbody = document.getElementById('pricingBody');
+  if (!pricingData.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--text-dim);text-align:center;padding:16px;">No pricing data</td></tr>';
+    return;
+  }
+
+  // Group by provider
+  let html = '';
+  let lastProvider = null;
+  pricingData.forEach((p, i) => {
+    const provider = p.provider || 'Other';
+    if (provider !== lastProvider) {
+      html += '<tr><td colspan="4" style="padding:10px 12px 6px;border-bottom:1px solid var(--border);background:var(--bg-panel-alt);">' +
+        '<span style="font-family:var(--font-mono);font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-secondary);">' + provider + '</span>' +
+        '</td></tr>';
+      lastProvider = provider;
+    }
+    html += pricingRow(p, i);
+  });
+  tbody.innerHTML = html;
 }
 
 function updatePricingRow(index, field, value) {

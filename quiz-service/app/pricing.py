@@ -76,6 +76,29 @@ def get_token_pricing(model: str) -> tuple[float, float] | None:
     return None
 
 
+_PROVIDER_PREFIXES = [
+    ("claude-", "Claude"),
+    ("gpt-", "OpenAI"),
+    ("o3-", "OpenAI"),
+    ("o1-", "OpenAI"),
+    ("llama-", "Groq"),
+    ("mixtral-", "Groq"),
+    ("qwen-", "Groq"),
+    ("gemini-", "Google AI"),
+]
+
+# Provider display order
+_PROVIDER_ORDER = ["Claude", "OpenAI", "Groq", "Google AI", "Other"]
+
+
+def _infer_provider(model: str) -> str:
+    m = model.lower()
+    for prefix, provider in _PROVIDER_PREFIXES:
+        if m.startswith(prefix):
+            return provider
+    return "Other"
+
+
 def get_all_pricing() -> list[dict]:
     """Return merged pricing table (defaults + overrides) for the config UI."""
     merged: dict[str, tuple[float, float]] = {}
@@ -85,7 +108,13 @@ def get_all_pricing() -> list[dict]:
     # Apply overrides (may add new models or update existing)
     for model, price in _overrides.items():
         merged[model] = price
-    return [
-        {"model": m, "input_per_mtok": p[0], "output_per_mtok": p[1]}
-        for m, p in sorted(merged.items())
+
+    entries = [
+        {"model": m, "input_per_mtok": p[0], "output_per_mtok": p[1],
+         "provider": _infer_provider(m)}
+        for m, p in merged.items()
     ]
+    # Sort by provider order, then model name
+    order_map = {p: i for i, p in enumerate(_PROVIDER_ORDER)}
+    entries.sort(key=lambda e: (order_map.get(e["provider"], 99), e["model"]))
+    return entries
