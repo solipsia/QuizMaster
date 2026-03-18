@@ -4,7 +4,7 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 
-from .models import ErrorInfo, ErrorSummary, LatencyStats
+from .models import ErrorInfo, ErrorSummary, LatencyStats, SpendAnalytics, SpendEntry
 
 
 class LatencyTracker:
@@ -42,6 +42,7 @@ class MetricsCollector:
         self._error_total: int = 0
         self._error_timestamps: deque[float] = deque(maxlen=500)
         self._last_error: ErrorInfo | None = None
+        self._spend: dict[tuple[str, str], dict] = {}
 
     @property
     def uptime_seconds(self) -> int:
@@ -55,6 +56,37 @@ class MetricsCollector:
             timestamp=datetime.fromtimestamp(now, tz=timezone.utc).isoformat(),
             stage=stage,
             message=message,
+        )
+
+    def record_spend(self, provider: str, model: str, input_tokens: int, output_tokens: int) -> None:
+        key = (provider, model)
+        if key not in self._spend:
+            self._spend[key] = {"api_calls": 0, "input_tokens": 0, "output_tokens": 0}
+        self._spend[key]["api_calls"] += 1
+        self._spend[key]["input_tokens"] += input_tokens
+        self._spend[key]["output_tokens"] += output_tokens
+
+    def spend_analytics(self) -> SpendAnalytics:
+        entries = []
+        total_calls = 0
+        total_in = 0
+        total_out = 0
+        for (provider, model), data in self._spend.items():
+            entries.append(SpendEntry(
+                provider=provider,
+                model=model,
+                api_calls=data["api_calls"],
+                input_tokens=data["input_tokens"],
+                output_tokens=data["output_tokens"],
+            ))
+            total_calls += data["api_calls"]
+            total_in += data["input_tokens"]
+            total_out += data["output_tokens"]
+        return SpendAnalytics(
+            total_api_calls=total_calls,
+            total_input_tokens=total_in,
+            total_output_tokens=total_out,
+            by_model=entries,
         )
 
     def error_summary(self) -> ErrorSummary:

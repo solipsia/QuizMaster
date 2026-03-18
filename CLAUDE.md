@@ -1,6 +1,6 @@
 # QuizMaster — Claude Code Reference
 
-Full system design is in `TechnicalDesign.md`. This file covers operational knowledge needed to work on the codebase.
+Full system design is in `TechnicalDesign.md`. The UI/UX of the quiz device is in `FunctionalDesign.md`. This file covers operational knowledge needed to work on the codebase.
 
 ## Repository & Deployment
 
@@ -56,7 +56,7 @@ quiz-service/
 ### Config persistence
 - `/data/config.json` on the Docker named volume overrides `config.default.json` at startup
 - API keys are **never stored in config.json** — only the env var name (e.g. `GOOGLE_API_KEY`) is stored
-- All four API key env vars must be explicitly listed in `docker-compose.yml` environment section, otherwise they are not passed to the container even if set in Portainer
+- All five API key env vars (`GOOGLE_API_KEY`, `CLAUDE_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY`, and legacy `ANTHROPIC_API_KEY`) must be explicitly listed in `docker-compose.yml` environment section, otherwise they are not passed to the container even if set in Portainer
 
 ### State
 All runtime state lives on `app.state`: `pool`, `worker`, `generator`, `llm_client`, `tts_client`, `metrics`, `request_log`, `config_ref` (a one-element list so it can be mutated in place).
@@ -66,8 +66,8 @@ All runtime state lives on `app.state`: `pool`, `worker`, `generator`, `llm_clie
 | Provider | `provider` value | Notes |
 |---|---|---|
 | Google AI (Gemini) | `google` | Default. `x-goog-api-key` header. Free tier: 30 RPD on gemini-2.5-flash |
-| Anthropic Claude | `claude` | Messages API |
-| Groq | `openai` | OpenAI-compatible. Base URL: `https://api.groq.com/openai/v1`, env: `GROQ_API_KEY` |
+| Anthropic Claude | `claude` | Messages API, env: `CLAUDE_API_KEY` |
+| Groq | `groq` | OpenAI-compatible. Base URL: `https://api.groq.com/openai/v1`, env: `GROQ_API_KEY` |
 | OpenAI | `openai` | Standard |
 | Ollama | `ollama` | Local, no key needed |
 
@@ -97,7 +97,7 @@ Both pages are single self-contained HTML files with inline CSS and JS. No build
 
 ## Firmware (ESP32 DevKitV1)
 
-MCU is the ELEGOO ESP32 DevKitV1 (ESP32-WROOM-32, Xtensa dual-core, CP2102 USB-serial). Test sketches live in `firmware/`. Flash with arduino-cli:
+MCU is the ELEGOO ESP32 DevKitV1 (ESP32-WROOM-32, Xtensa dual-core, CP2102 USB-serial). Main application is `firmware/quizmaster/`. Test sketches also live in `firmware/`. Flash with arduino-cli:
 ```
 arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 firmware/<sketch>
 arduino-cli upload  --fqbn esp32:esp32:esp32doit-devkit-v1 --port COM21 firmware/<sketch>
@@ -137,12 +137,38 @@ On the standard ESP32, GPIO numbers match directly — no D-pin mapping indirect
 - Backlight (LED pin): tie to 3V3 for always-on, or connect to a GPIO for PWM brightness control.
 - SPI clock: 27 MHz is the safe maximum for ILI9488 (40 MHz may cause artifacts).
 - **Touch Y-axis is inverted**: With rotation 1 (landscape), `tft.getTouch()` returns Y values flipped. Apply `ty = tft.height() - 1 - ty` after reading. Calibration data: `{ 300, 3600, 300, 3600, 3 }`.
+- **ILI9488 panel color inversion**: This ILI9488 panel has inherent color inversion — without `tft.invertDisplay(true)`, RGB565 colors display as their bitwise complement (e.g. red→cyan, blue→yellow). The existing UI color palette (`COL_GOLD`, `COL_CYAN`, etc.) was tuned while the display was in the default (inverted) state, so those constants produce the intended visual appearance WITHOUT `invertDisplay(true)`. If you need true RGB565 colors (e.g. for the splash logo), call `tft.invertDisplay(true)` before drawing and `tft.invertDisplay(false)` after to restore the UI palette. Do NOT add `#define TFT_INVERSION_ON` globally — it would fix raw colors but break every existing UI color constant.
 
 ### I2S — use ESP-IDF 5.x API
 Use `driver/i2s_std.h` (same API as before):
 - `i2s_new_channel` / `i2s_channel_init_std_mode` / `i2s_channel_enable`
 - `I2S_STD_MSB_SLOT_DEFAULT_CONFIG` works with MAX98357A
 - See `firmware/speaker_test/speaker_test.ino` for working reference
+
+### Audio Streaming Architecture (IMPORTANT — hard-won lessons)
+
+The device streams WAV audio from the quiz service over WiFi to I2S. This required solving several ESP32 memory and timing constraints:
+
+**Architecture: pre-buffer + stream (never download-then-play)**
+- A **64KB pre-buffer** is `malloc`'d once at startup (before WiFi init) and reused for every audio file
+- Audio task (core 0) does HTTP GET, parses WAV header, fills the 64KB pre-buffer, writes it to I2S (~1.45s head start), then streams the remainder using non-blocking `st->read()` in 4KB chunks
+- This approach handles audio files of **any size** — only 68KB of RAM needed total
+
+**Why not download-then-play:**
+- ESP32-WROOM-32 DRAM is split into **two non-contiguous segments** (~160KB + ~128KB). A single `malloc` cannot span both.
+- After the runtime/FreeRTOS/WiFi stack claim memory, the **max contiguous block is ~110KB** — regardless of when you allocate or which core you allocate from.
+- Question audio files from Piper TTS at 22050 Hz mono 16-bit can be **118KB+ for 2.7s of speech**. These simply will not fit in a single allocation.
+- Truncating audio to fit the buffer cuts off questions mid-sentence — unacceptable.
+
+**Key implementation details:**
+- Pre-buffer must be allocated **before `WiFi.begin()`** — WiFi fragments the heap further
+- WAV header parsing uses `readBytes()` (blocks with timeout), NOT `st.available()` + `st.read()` — `available()` is unreliable on ESP32 WiFiClient and returns 0 between TCP segments
+- `Stream::setTimeout()` takes **milliseconds** (not seconds) — `setTimeout(5)` = 5ms timeout = broken
+- Set stream timeout **before** WAV parsing, not after
+- During streaming phase, use non-blocking `st->available()` + `st->read()` (NOT `readBytes`) to avoid blocking on partial chunks while I2S DMA drains
+- DMA config: 12 descriptors × 1024 frames provides ~0.56s of DMA buffering
+- The audio task runs on **core 0**; UI/touch/HTTP-fetch runs on **core 1**
+- `play_audio()` is non-blocking (sends URL to FreeRTOS queue); `stop_audio()` sets a flag and waits
 
 ### Quiz API response shape
 `GET /api/quiz` returns:
@@ -155,6 +181,7 @@ Audio URLs are fully qualified — do not prepend the base URL.
 
 ## Known Issues & Gotchas
 
+- **Quiz API category filtering**: `GET /api/quiz?category=general` returns 503 if the pool has no questions for that specific category, even if other categories have questions. The device defaults to "all" (no category param) to avoid this. The dashboard queue view shows all categories, which can be misleading.
 - **New API key env vars**: Adding a new LLM provider requires adding its key to `docker-compose.yml` environment section AND redeploying — Portainer env vars alone are not enough
 - **config.json on volume wins**: If something is broken in config, fix it via the `/config` page and save, or shell into the container and edit `/data/config.json` directly
 - **Google AI intermittent 400 "API key expired"**: Usually resolves itself; also try stripping whitespace from the key. Confirmed fixed by adding `api_key.strip()` in `llm/google.py`

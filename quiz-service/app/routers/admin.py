@@ -67,6 +67,7 @@ async def get_status(request: Request):
             api_quiz_response=metrics.api_quiz_response.stats(),
         ),
         errors=metrics.error_summary(),
+        spend=metrics.spend_analytics(),
     ).model_dump()
 
 
@@ -81,30 +82,79 @@ async def get_log(request: Request, limit: int = Query(50, ge=1, le=500)):
     return request.app.state.request_log.get(limit)
 
 
-@router.get("/api/admin/list-models")
+@router.post("/api/admin/list-models")
 async def list_models(request: Request):
-    """Call Google ListModels to show available models for the current API key."""
+    """List available models for the given LLM config."""
     import httpx
-    state = request.app.state
-    config = state.config_ref[0]
-    api_key = get_api_key(config.llm.api_key_env)
-    if not api_key:
-        return JSONResponse(status_code=400, content={"error": f"API key env var {config.llm.api_key_env} is not set"})
+    body = await request.json()
+    try:
+        from ..models import LLMConfig
+        llm_cfg = LLMConfig(**body)
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": f"Invalid config: {e}"})
 
-    base = config.llm.api_base_url.rstrip("/")
-    url = f"{base}/models"
+    api_key = get_api_key(llm_cfg.api_key_env)
+    base = llm_cfg.api_base_url.rstrip("/")
+
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(url, headers={"x-goog-api-key": api_key.strip()})
-        if not resp.is_success:
-            try:
-                detail = resp.json().get("error", {}).get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            return JSONResponse(status_code=200, content={"error": f"Google AI {resp.status_code}: {detail}"})
-        data = resp.json()
-        models = [m.get("name") for m in data.get("models", []) if "generateContent" in m.get("supportedGenerationMethods", [])]
-        return {"models": models}
+            if llm_cfg.provider == "google":
+                if not api_key:
+                    return JSONResponse(status_code=200, content={"error": f"API key env var {llm_cfg.api_key_env} is not set"})
+                resp = await client.get(f"{base}/models", headers={"x-goog-api-key": api_key.strip()})
+                if not resp.is_success:
+                    try:
+                        detail = resp.json().get("error", {}).get("message", resp.text)
+                    except Exception:
+                        detail = resp.text
+                    return JSONResponse(status_code=200, content={"error": f"Google AI {resp.status_code}: {detail}"})
+                data = resp.json()
+                models = [m.get("name") for m in data.get("models", []) if "generateContent" in m.get("supportedGenerationMethods", [])]
+                return {"models": models}
+
+            elif llm_cfg.provider == "claude":
+                if not api_key:
+                    return JSONResponse(status_code=200, content={"error": f"API key env var {llm_cfg.api_key_env} is not set"})
+                resp = await client.get(
+                    f"{base}/v1/models",
+                    headers={"x-api-key": api_key.strip(), "anthropic-version": "2023-06-01"},
+                )
+                if not resp.is_success:
+                    try:
+                        detail = resp.json().get("error", {}).get("message", resp.text)
+                    except Exception:
+                        detail = resp.text
+                    return JSONResponse(status_code=200, content={"error": f"Claude {resp.status_code}: {detail}"})
+                data = resp.json()
+                models = [m.get("id") for m in data.get("data", [])]
+                return {"models": models}
+
+            elif llm_cfg.provider in ("openai", "groq"):
+                headers = {"content-type": "application/json"}
+                if api_key:
+                    headers["Authorization"] = f"Bearer {api_key.strip()}"
+                resp = await client.get(f"{base}/models", headers=headers)
+                if not resp.is_success:
+                    try:
+                        detail = resp.json().get("error", {}).get("message", resp.text)
+                    except Exception:
+                        detail = resp.text
+                    return JSONResponse(status_code=200, content={"error": f"{llm_cfg.provider.title()} {resp.status_code}: {detail}"})
+                data = resp.json()
+                models = sorted([m.get("id") for m in data.get("data", [])])
+                return {"models": models}
+
+            elif llm_cfg.provider == "ollama":
+                resp = await client.get(f"{base}/api/tags")
+                if not resp.is_success:
+                    return JSONResponse(status_code=200, content={"error": f"Ollama {resp.status_code}: {resp.text}"})
+                data = resp.json()
+                models = [m.get("name") for m in data.get("models", [])]
+                return {"models": models}
+
+            else:
+                return JSONResponse(status_code=200, content={"error": f"List models not supported for provider '{llm_cfg.provider}'"})
+
     except Exception as e:
         return JSONResponse(status_code=200, content={"error": str(e)})
 

@@ -48,6 +48,11 @@ class GoogleAIClient(LLMClient):
                 raise RuntimeError(f"Google AI {resp.status_code}: {msg}")
 
         data = resp.json()
+        usage = data.get("usageMetadata", {})
+        self.last_usage = {
+            "input_tokens": usage.get("promptTokenCount", 0),
+            "output_tokens": usage.get("candidatesTokenCount", 0),
+        }
         try:
             text = data["candidates"][0]["content"]["parts"][0]["text"]
         except (KeyError, IndexError) as e:

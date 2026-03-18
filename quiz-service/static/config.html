@@ -685,8 +685,7 @@ textarea {
     <a class="tab active" href="/config">Configuration</a>
   </nav>
   <div class="header-actions">
-    <button class="btn" onclick="resetConfig()">Reset</button>
-    <button class="btn primary" onclick="saveConfig()" id="saveBtn">Save</button>
+    <span id="autoSaveStatus" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--text-dim);"></span>
   </div>
 </header>
 
@@ -709,6 +708,7 @@ textarea {
             <option value="google">Google AI (Gemini)</option>
             <option value="claude">Claude (Anthropic)</option>
             <option value="openai">OpenAI / Compatible</option>
+            <option value="groq">Groq</option>
             <option value="ollama">Ollama (Local)</option>
             <option value="custom">Custom</option>
           </select>
@@ -815,7 +815,7 @@ textarea {
       <div class="field-row">
         <div class="field">
           <label>Voice Model</label>
-          <select id="voiceModel" onchange="saveConfig()">
+          <select id="voiceModel" onchange="autoSaveImmediate()">
             <optgroup label="US English">
               <option value="en_US-amy-low">amy (low)</option>
               <option value="en_US-amy-medium">amy (medium)</option>
@@ -941,12 +941,26 @@ const DEFAULT_PROMPT = "You are a quiz master. Generate a trivia question and an
 let categories = [];
 
 const PROVIDER_DEFAULTS = {
-  google:  { api_base_url: 'https://generativelanguage.googleapis.com/v1beta', api_key_env: 'GOOGLE_API_KEY' },
-  claude:  { api_base_url: 'https://api.anthropic.com',                        api_key_env: 'ANTHROPIC_API_KEY' },
-  openai:  { api_base_url: 'https://api.openai.com/v1',                        api_key_env: 'OPENAI_API_KEY' },
-  ollama:  { api_base_url: 'http://localhost:11434',                            api_key_env: '' },
-  custom:  { api_base_url: '',                                                  api_key_env: '' },
+  google:  { model: 'models/gemini-2.5-flash',  api_base_url: 'https://generativelanguage.googleapis.com/v1beta', api_key_env: 'GOOGLE_API_KEY' },
+  claude:  { model: 'claude-haiku-4-5',          api_base_url: 'https://api.anthropic.com',                        api_key_env: 'ANTHROPIC_API_KEY' },
+  openai:  { model: 'gpt-4o-mini',               api_base_url: 'https://api.openai.com/v1',                        api_key_env: 'OPENAI_API_KEY' },
+  groq:    { model: 'llama-3.1-8b-instant',      api_base_url: 'https://api.groq.com/openai/v1',                   api_key_env: 'GROQ_API_KEY' },
+  ollama:  { model: 'llama3.1',                   api_base_url: 'http://localhost:11434',                            api_key_env: '' },
+  custom:  { model: '',                           api_base_url: '',                                                  api_key_env: '' },
 };
+
+let _saveTimer = null;
+let _loading = true;
+function autoSave() {
+  if (_loading) return;
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(saveConfig, 600);
+}
+function autoSaveImmediate() {
+  if (_loading) return;
+  clearTimeout(_saveTimer);
+  saveConfig();
+}
 
 // ─── BANNER ───
 function showBanner(msg, type = 'success') {
@@ -979,6 +993,7 @@ function renderCategories() {
 function removeCategory(index) {
   categories.splice(index, 1);
   renderCategories();
+  autoSaveImmediate();
 }
 
 function startAddCategory() {
@@ -997,8 +1012,11 @@ function startAddCategory() {
     const val = input.value.trim().toLowerCase();
     if (val && !categories.includes(val)) {
       categories.push(val);
+      renderCategories();
+      autoSaveImmediate();
+    } else {
+      renderCategories();
     }
-    renderCategories();
   }
 
   input.addEventListener('keydown', e => {
@@ -1011,6 +1029,7 @@ function startAddCategory() {
 // ─── DIFFICULTY ───
 function setDifficulty(val) {
   document.getElementById('diff-' + val).checked = true;
+  autoSaveImmediate();
 }
 
 function getDifficulty() {
@@ -1023,9 +1042,11 @@ function onProviderChange() {
   const provider = document.getElementById('llmProvider').value;
   const defaults = PROVIDER_DEFAULTS[provider];
   if (provider !== 'custom') {
+    document.getElementById('llmModel').value = defaults.model;
     document.getElementById('llmBaseUrl').value = defaults.api_base_url;
     document.getElementById('llmApiKeyEnv').value = defaults.api_key_env;
   }
+  autoSaveImmediate();
 }
 
 // ─── LOAD CONFIG ───
@@ -1037,6 +1058,8 @@ async function loadConfig() {
     populateForm(cfg);
   } catch (e) {
     showBanner('Failed to load configuration: ' + e.message, 'error');
+  } finally {
+    _loading = false;
   }
 }
 
@@ -1106,10 +1129,13 @@ async function checkPiperStatus(url) {
 }
 
 // ─── SAVE CONFIG ───
+let _saving = false;
 async function saveConfig() {
-  const btn = document.getElementById('saveBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-inline"></span>Saving…';
+  if (_saving || _loading) return;
+  _saving = true;
+  const statusEl = document.getElementById('autoSaveStatus');
+  statusEl.textContent = 'Saving…';
+  statusEl.style.color = 'var(--text-dim)';
 
   const cfg = {
     llm: {
@@ -1156,27 +1182,31 @@ async function saveConfig() {
     }
 
     const updated = await res.json();
-    populateForm(updated);
-    showBanner('Configuration saved successfully. ' +
-      (categories.length ? '' : '') +
-      'Changes are active immediately.', 'success');
+    // Update API key status without re-populating the whole form
+    const keyStatus = document.getElementById('apiKeyStatus');
+    if (updated.llm?.api_key_set) {
+      keyStatus.className = 'input-status set';
+      keyStatus.textContent = '✓ Set';
+    } else {
+      keyStatus.className = 'input-status not-set';
+      keyStatus.textContent = '✗ Not set';
+    }
+    statusEl.textContent = 'Saved ✓';
+    statusEl.style.color = 'var(--green)';
+    setTimeout(() => { statusEl.textContent = ''; }, 2000);
   } catch (e) {
+    statusEl.textContent = 'Save failed';
+    statusEl.style.color = 'var(--red)';
     showBanner('Failed to save: ' + e.message, 'error');
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Save';
+    _saving = false;
   }
-}
-
-// ─── RESET ───
-function resetConfig() {
-  loadConfig();
-  showBanner('Configuration reloaded from server.', 'success');
 }
 
 // ─── RESET PROMPT ───
 function resetPrompt() {
   document.getElementById('systemPrompt').value = DEFAULT_PROMPT;
+  autoSaveImmediate();
 }
 
 // ─── TEST PROMPT ───
@@ -1339,11 +1369,21 @@ async function listModels() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-inline"></span>Fetching…';
 
-  // Save current form values first so the endpoint uses the right config
-  await saveConfig();
+  const llmConfig = {
+    provider: document.getElementById('llmProvider').value,
+    model: document.getElementById('llmModel').value,
+    api_base_url: document.getElementById('llmBaseUrl').value,
+    api_key_env: document.getElementById('llmApiKeyEnv').value,
+    temperature: parseFloat(document.getElementById('llmTemperature').value) || 0.9,
+    max_tokens: parseInt(document.getElementById('llmMaxTokens').value) || 1024,
+  };
 
   try {
-    const res = await fetch('/api/admin/list-models');
+    const res = await fetch('/api/admin/list-models', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(llmConfig),
+    });
     const data = await res.json();
 
     if (data.error) {
@@ -1353,11 +1393,13 @@ async function listModels() {
     } else {
       title.textContent = '✓ Available models (' + data.models.length + ')';
       result.className = 'test-result visible';
+      const isGoogle = llmConfig.provider === 'google';
       const items = data.models.map(m => {
-        const name = m.replace('models/', '');
+        const display = isGoogle ? m.replace('models/', '') : m;
+        const value = isGoogle ? m : m;
         return '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">' +
-          '<span style="font-family:var(--font-mono);font-size:0.75rem;color:var(--text-primary)">' + name + '</span>' +
-          '<button class="btn" style="padding:2px 8px;font-size:0.65rem;" onclick="useModel(\'' + name + '\')">Use</button>' +
+          '<span style="font-family:var(--font-mono);font-size:0.75rem;color:var(--text-primary)">' + display + '</span>' +
+          '<button class="btn" style="padding:2px 8px;font-size:0.65rem;" onclick="useModel(\'' + value.replace(/'/g, "\\'") + '\')">Use</button>' +
           '</div>';
       }).join('');
       body.innerHTML = '<div style="max-height:240px;overflow-y:auto;">' + items + '</div>';
@@ -1373,12 +1415,35 @@ async function listModels() {
 }
 
 function useModel(name) {
-  document.getElementById('llmModel').value = 'models/' + name;
+  document.getElementById('llmModel').value = name;
   document.getElementById('llmTestResult').className = 'test-result';
+  autoSaveImmediate();
+}
+
+// ─── AUTO-SAVE BINDINGS ───
+function bindAutoSave() {
+  // Text inputs: debounced save on input
+  ['llmModel', 'llmBaseUrl', 'llmApiKeyEnv', 'systemPrompt', 'piperUrl', 'welcomeText'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', autoSave);
+  });
+
+  // Number inputs: debounced save on input
+  ['llmTemperature', 'llmMaxTokens', 'poolTargetSize', 'poolMinReady', 'poolBackfillTrigger', 'audioTtl', 'idleTimeout'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', autoSave);
+  });
+
+  // Selects: immediate save on change
+  ['sampleRate'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', autoSaveImmediate);
+  });
 }
 
 // ─── INIT ───
 loadConfig();
+bindAutoSave();
 </script>
 </body>
 </html>

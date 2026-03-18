@@ -32,5 +32,10 @@ class OpenAICompatClient(LLMClient):
             resp.raise_for_status()
 
         data = resp.json()
+        usage = data.get("usage", {})
+        self.last_usage = {
+            "input_tokens": usage.get("prompt_tokens", 0),
+            "output_tokens": usage.get("completion_tokens", 0),
+        }
         text = data["choices"][0]["message"]["content"]
         return self.parse_qa_response(text)

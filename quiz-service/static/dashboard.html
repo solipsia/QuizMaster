@@ -858,6 +858,47 @@ audio::-webkit-media-controls-panel { border-radius: 4px; }
     </div>
   </div>
 
+  <!-- SPEND ANALYTICS -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Spend Analytics</span>
+      <span style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-dim);">Since service start</span>
+    </div>
+    <div class="panel-body" style="padding:0;">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-bottom:1px solid var(--border);">
+        <div style="padding:14px 16px;text-align:center;">
+          <div style="font-family:var(--font-mono);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:4px;">API Calls</div>
+          <div style="font-family:var(--font-mono);font-size:1.3rem;font-weight:600;color:var(--text-primary);" id="spendTotalCalls">0</div>
+        </div>
+        <div style="padding:14px 16px;text-align:center;border-left:1px solid var(--border);border-right:1px solid var(--border);">
+          <div style="font-family:var(--font-mono);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:4px;">Input Tokens</div>
+          <div style="font-family:var(--font-mono);font-size:1.3rem;font-weight:600;color:var(--cyan);" id="spendTotalInput">0</div>
+        </div>
+        <div style="padding:14px 16px;text-align:center;">
+          <div style="font-family:var(--font-mono);font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:4px;">Output Tokens</div>
+          <div style="font-family:var(--font-mono);font-size:1.3rem;font-weight:600;color:var(--green);" id="spendTotalOutput">0</div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>Model</th>
+              <th>Calls</th>
+              <th>Input Tokens</th>
+              <th>Output Tokens</th>
+              <th>Total Tokens</th>
+            </tr>
+          </thead>
+          <tbody id="spendBody">
+            <tr><td colspan="6" style="color:var(--text-dim);text-align:center;padding:20px;">No API calls yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- QUESTION QUEUE -->
   <div class="panel">
     <div class="panel-header">
@@ -1075,6 +1116,9 @@ function renderStatus(data) {
 
   // Latency
   renderLatency(data.latency, data.llm_api, data.piper_tts);
+
+  // Spend analytics
+  renderSpend(data.spend);
 }
 
 // ─── RENDER LATENCY ───
@@ -1111,6 +1155,41 @@ function renderLatency(lat, llm, piper) {
     document.getElementById('piperDot').className = 'status-dot ' + (piper.status === 'ok' ? 'ok' : 'error');
     document.getElementById('piperInfo').textContent = piper.status === 'ok' ? 'Connected' : 'Disconnected';
   }
+}
+
+// ─── RENDER SPEND ───
+function fmtTokens(n) {
+  if (n == null || n === 0) return '0';
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return String(n);
+}
+
+function renderSpend(spend) {
+  if (!spend) return;
+  document.getElementById('spendTotalCalls').textContent = spend.total_api_calls || 0;
+  document.getElementById('spendTotalInput').textContent = fmtTokens(spend.total_input_tokens);
+  document.getElementById('spendTotalOutput').textContent = fmtTokens(spend.total_output_tokens);
+
+  const entries = spend.by_model || [];
+  if (!entries.length) {
+    document.getElementById('spendBody').innerHTML = '<tr><td colspan="6" style="color:var(--text-dim);text-align:center;padding:20px;">No API calls yet</td></tr>';
+    return;
+  }
+
+  const html = entries.map(e => {
+    const total = (e.input_tokens || 0) + (e.output_tokens || 0);
+    return '<tr>' +
+      '<td class="mono-val">' + e.provider + '</td>' +
+      '<td class="mono-val">' + e.model + '</td>' +
+      '<td class="mono-val">' + e.api_calls + '</td>' +
+      '<td class="mono-val" style="color:var(--cyan)">' + fmtTokens(e.input_tokens) + '</td>' +
+      '<td class="mono-val" style="color:var(--green)">' + fmtTokens(e.output_tokens) + '</td>' +
+      '<td class="mono-val">' + fmtTokens(total) + '</td>' +
+      '</tr>';
+  }).join('');
+
+  document.getElementById('spendBody').innerHTML = html;
 }
 
 // ─── RENDER QUEUE ───

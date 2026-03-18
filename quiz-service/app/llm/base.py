@@ -8,6 +8,8 @@ from ..models import LLMConfig
 
 
 class LLMClient(ABC):
+    last_usage: dict = {}  # {'input_tokens': int, 'output_tokens': int} set after generate()
+
     @abstractmethod
     async def generate(self, system_prompt: str) -> dict:
         """Call the LLM and return parsed {"question": ..., "answer": ...}."""
@@ -40,6 +42,6 @@ def create_llm_client(config: LLMConfig, api_key: str | None) -> LLMClient:
     elif config.provider == "ollama":
         from .ollama import OllamaClient
         return OllamaClient(config)
-    else:  # openai, custom
+    else:  # openai, groq, custom
         from .openai_compat import OpenAICompatClient
         return OpenAICompatClient(config, api_key)

@@ -29,5 +29,9 @@ class OllamaClient(LLMClient):
             resp.raise_for_status()
 
         data = resp.json()
+        self.last_usage = {
+            "input_tokens": data.get("prompt_eval_count", 0),
+            "output_tokens": data.get("eval_count", 0),
+        }
         text = data["message"]["content"]
         return self.parse_qa_response(text)

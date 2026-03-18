@@ -49,6 +49,16 @@ class QuestionGenerator:
         llm_ms = int((time.time() - llm_start) * 1000)
         self.metrics.llm.record(llm_ms)
 
+        # Record spend/token usage
+        usage = getattr(self.llm_client, "last_usage", {})
+        if usage:
+            self.metrics.record_spend(
+                provider=self.config.llm.provider,
+                model=self.config.llm.model,
+                input_tokens=usage.get("input_tokens", 0),
+                output_tokens=usage.get("output_tokens", 0),
+            )
+
         # Generate unique ID
         qid = uuid.uuid4().hex[:6]
 

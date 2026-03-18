@@ -36,5 +36,10 @@ class ClaudeClient(LLMClient):
             resp.raise_for_status()
 
         data = resp.json()
+        usage = data.get("usage", {})
+        self.last_usage = {
+            "input_tokens": usage.get("input_tokens", 0),
+            "output_tokens": usage.get("output_tokens", 0),
+        }
         text = data["content"][0]["text"]
         return self.parse_qa_response(text)

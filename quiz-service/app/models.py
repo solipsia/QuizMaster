@@ -72,6 +72,21 @@ class LatencyMetrics(BaseModel):
     api_quiz_response: LatencyStats = LatencyStats()
 
 
+class SpendEntry(BaseModel):
+    provider: str = ""
+    model: str = ""
+    api_calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
+class SpendAnalytics(BaseModel):
+    total_api_calls: int = 0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    by_model: list[SpendEntry] = []
+
+
 class StatusResponse(BaseModel):
     uptime_seconds: int = 0
     pool_size: int = 0
@@ -86,6 +101,7 @@ class StatusResponse(BaseModel):
     piper_tts: PiperStatus = PiperStatus()
     latency: LatencyMetrics = LatencyMetrics()
     errors: ErrorSummary = ErrorSummary()
+    spend: SpendAnalytics = SpendAnalytics()
 
 
 class LogEntry(BaseModel):
