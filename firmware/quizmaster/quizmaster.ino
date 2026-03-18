@@ -285,7 +285,7 @@ static void stream_audio(const char* url) {
         }
     }
 
-    if (!audio_stop) delay(300);   // flush DMA tail
+    if (!audio_stop) delay(700);   // flush DMA tail (12×1024 frames ≈ 0.56s at 22050 Hz)
     digitalWrite(PIN_AMP_SD, LOW);
     http.end();
     Serial.printf("[audio] done (remaining=%u)\n", remaining);
@@ -661,8 +661,8 @@ static void scr_answer() {
     tft.fillRect(PAD, ty, USE_W, 2, COL_GOLD);
     ty += 8;
 
-    // Answer in green (12pt)
-    tft.setFreeFont(&FreeSans12pt7b);
+    // Answer in green (24pt)
+    tft.setFreeFont(&FreeSans24pt7b);
     draw_wrapped(cur_q.a_text.c_str(), PAD, ty, USE_W, ACT_Y - 4, COL_GREEN, COL_BG);
 
     // Split buttons
