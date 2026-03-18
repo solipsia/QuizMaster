@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -145,6 +146,34 @@ async def test_llm(request: Request):
         )
 
 
+@router.post("/api/admin/test-tts")
+async def test_tts(request: Request):
+    """Synthesize a short phrase and return the audio URL for playback."""
+    state = request.app.state
+    tts_client = state.tts_client
+    audio_dir: Path = state.audio_dir
+
+    body = await request.json()
+    text = body.get("text", "This is a test of the text to speech system.")
+
+    filename = f"tts_test_{uuid.uuid4().hex[:8]}.wav"
+    audio_path = audio_dir / filename
+
+    t0 = time.time()
+    try:
+        duration_ms = await tts_client.synthesize(text, audio_path)
+        latency_ms = int((time.time() - t0) * 1000)
+        base = str(request.base_url).rstrip("/")
+        return {
+            "ok": True,
+            "audio_url": f"{base}/audio/{filename}",
+            "duration_ms": duration_ms,
+            "latency_ms": latency_ms,
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
+
+
 @router.post("/api/admin/generate")
 async def force_generate(request: Request, category: str | None = Query(None)):
     state = request.app.state
@@ -253,6 +282,7 @@ async def update_config(request: Request):
     current = state.config_ref[0]
     old_quiz = current.quiz.model_dump()
     old_llm = current.llm.model_dump()
+    old_welcome = current.device.welcome_text
 
     try:
         new_config = merge_config_update(current, body)
@@ -279,6 +309,19 @@ async def update_config(request: Request):
     if new_quiz != old_quiz:
         await state.pool.flush()
         state.worker.trigger()
+
+    # Regenerate welcome audio if text changed
+    if new_config.device.welcome_text != old_welcome:
+        audio_dir: Path = state.audio_dir
+        try:
+            await state.tts_client.synthesize(
+                new_config.device.welcome_text, audio_dir / "welcome.wav"
+            )
+            (audio_dir / "welcome.txt").write_text(
+                new_config.device.welcome_text, encoding="utf-8"
+            )
+        except Exception:
+            pass  # Non-critical — will regenerate on next device boot
 
     data = new_config.model_dump()
     data["llm"]["api_key_set"] = check_api_key_set(new_config.llm.api_key_env)

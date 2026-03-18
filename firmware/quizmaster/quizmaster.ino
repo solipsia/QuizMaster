@@ -381,25 +381,6 @@ static QuizQ fetch_question(const char* category, Error* err = nullptr) {
     return q;
 }
 
-// Fetch welcome audio URL from service. Returns empty string on failure.
-static String fetch_welcome_audio() {
-    String url = String(SERVICE_BASE) + "/api/device/welcome";
-    HTTPClient http;
-    http.begin(url);
-    http.setTimeout(FETCH_TIMEOUT_MS);
-    int code = http.GET();
-    String audio_url = "";
-    if (code == HTTP_CODE_OK) {
-        JsonDocument doc;
-        if (!deserializeJson(doc, http.getString())) {
-            audio_url = doc["audio_url"].as<String>();
-        }
-    }
-    http.end();
-    Serial.printf("[welcome] HTTP %d, url=%s\n", code, audio_url.c_str());
-    return audio_url;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 //  TEXT RENDERING  — word-wrap for TFT_eSPI
 // ═══════════════════════════════════════════════════════════════════════════
@@ -895,29 +876,25 @@ void setup() {
     cur_screen = S_SPLASH;
     scr_splash();
 
-    // Start WiFi during splash hold
+    // Start WiFi during splash — play welcome audio as soon as connected
     WiFi.setAutoReconnect(true);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    String welcome_wav = String(SERVICE_BASE) + "/audio/welcome.wav";
+    bool welcome_started = false;
     uint32_t t0 = millis();
-    while (millis() - t0 < SPLASH_HOLD_MS) {
+    while (millis() - t0 < SPLASH_HOLD_MS || audio_playing) {
         if (WiFi.status() == WL_CONNECTED && !wifi_up) {
             wifi_up = true;
             Serial.printf("WiFi OK: %s\n", WiFi.localIP().toString().c_str());
         }
+        if (wifi_up && !welcome_started) {
+            welcome_started = true;
+            play_audio(welcome_wav);
+        }
+        if (millis() - t0 > 8000) break;   // hard cap
         delay(50);
     }
     wifi_up = (WiFi.status() == WL_CONNECTED);
-
-    // Play welcome audio (fetched from service) during splash
-    if (wifi_up) {
-        String welcome_url = fetch_welcome_audio();
-        if (welcome_url.length() > 0) {
-            play_audio(welcome_url);
-            // Hold splash while welcome audio plays
-            uint32_t wt = millis();
-            while (audio_playing && millis() - wt < 5000) delay(50);
-        }
-    }
 
     // Initial battery read
     last_bat = 0;  // force immediate read

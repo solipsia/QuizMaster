@@ -815,19 +815,62 @@ textarea {
       <div class="field-row">
         <div class="field">
           <label>Voice Model</label>
-          <input type="text" id="voiceModel" placeholder="en_US-lessac-medium">
+          <select id="voiceModel">
+            <optgroup label="US English">
+              <option value="en_US-amy-low">amy (low)</option>
+              <option value="en_US-amy-medium">amy (medium)</option>
+              <option value="en_US-arctic-medium">arctic (medium)</option>
+              <option value="en_US-danny-low">danny (low)</option>
+              <option value="en_US-hfc_female-medium">hfc female (medium)</option>
+              <option value="en_US-hfc_male-medium">hfc male (medium)</option>
+              <option value="en_US-joe-medium">joe (medium)</option>
+              <option value="en_US-john-medium">john (medium)</option>
+              <option value="en_US-kristin-medium">kristin (medium)</option>
+              <option value="en_US-lessac-low">lessac (low)</option>
+              <option value="en_US-lessac-medium" selected>lessac (medium)</option>
+              <option value="en_US-lessac-high">lessac (high)</option>
+              <option value="en_US-libritts-high">libritts (high)</option>
+              <option value="en_US-libritts_r-medium">libritts_r (medium)</option>
+              <option value="en_US-ljspeech-medium">ljspeech (medium)</option>
+              <option value="en_US-ljspeech-high">ljspeech (high)</option>
+              <option value="en_US-norman-medium">norman (medium)</option>
+              <option value="en_US-ryan-low">ryan (low)</option>
+              <option value="en_US-ryan-medium">ryan (medium)</option>
+              <option value="en_US-ryan-high">ryan (high)</option>
+            </optgroup>
+            <optgroup label="GB English">
+              <option value="en_GB-alan-low">alan (low)</option>
+              <option value="en_GB-alan-medium">alan (medium)</option>
+              <option value="en_GB-alba-medium">alba (medium)</option>
+              <option value="en_GB-aru-medium">aru (medium)</option>
+              <option value="en_GB-cori-medium">cori (medium)</option>
+              <option value="en_GB-cori-high">cori (high)</option>
+              <option value="en_GB-jenny_dioco-medium">jenny dioco (medium)</option>
+              <option value="en_GB-northern_english_male-medium">northern male (medium)</option>
+              <option value="en_GB-semaine-medium">semaine (medium)</option>
+              <option value="en_GB-southern_english_female-low">southern female (low)</option>
+              <option value="en_GB-vctk-medium">vctk (medium)</option>
+            </optgroup>
+          </select>
         </div>
         <div class="field">
           <label>Sample Rate</label>
-          <div class="input-with-suffix">
-            <input type="number" id="sampleRate" min="8000" max="48000" placeholder="22050">
-            <span class="input-suffix">Hz</span>
-          </div>
+          <select id="sampleRate">
+            <option value="16000">16,000 Hz (low quality models)</option>
+            <option value="22050" selected>22,050 Hz (medium/high models)</option>
+          </select>
+          <span class="hint">Determined by voice model — most use 22,050 Hz</span>
         </div>
       </div>
-      <div class="tooltip-wrap">
-        <button class="btn" disabled>Test TTS</button>
-        <span class="tooltip-text">Coming soon — requires Piper connection</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn primary" onclick="testTTS()" id="testTTSBtn">Test TTS</button>
+      </div>
+      <div class="test-result" id="ttsTestResult">
+        <div class="test-result-header">
+          <span id="ttsTestResultTitle">TTS Test</span>
+          <button class="test-result-close" onclick="document.getElementById('ttsTestResult').className='test-result'">&#10005;</button>
+        </div>
+        <div id="ttsTestResultBody"></div>
       </div>
     </div>
   </div>
@@ -1024,8 +1067,8 @@ function populateForm(cfg) {
 
   // TTS
   document.getElementById('piperUrl').value = cfg.tts?.piper_url || '';
-  document.getElementById('voiceModel').value = cfg.tts?.voice_model || '';
-  document.getElementById('sampleRate').value = cfg.tts?.sample_rate ?? 22050;
+  document.getElementById('voiceModel').value = cfg.tts?.voice_model || 'en_US-lessac-medium';
+  document.getElementById('sampleRate').value = String(cfg.tts?.sample_rate ?? 22050);
 
   // Pool
   document.getElementById('poolTargetSize').value = cfg.pool?.target_size ?? 10;
@@ -1080,7 +1123,7 @@ async function saveConfig() {
     tts: {
       piper_url: document.getElementById('piperUrl').value,
       voice_model: document.getElementById('voiceModel').value,
-      sample_rate: parseInt(document.getElementById('sampleRate').value) || 22050,
+      sample_rate: parseInt(document.getElementById('sampleRate').value, 10) || 22050,
       output_format: 'wav'
     },
     pool: {
@@ -1241,6 +1284,48 @@ async function testLLM() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Test Connection';
+  }
+}
+
+// ─── TEST TTS ───
+async function testTTS() {
+  const btn = document.getElementById('testTTSBtn');
+  const result = document.getElementById('ttsTestResult');
+  const body = document.getElementById('ttsTestResultBody');
+  const title = document.getElementById('ttsTestResultTitle');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-inline"></span>Synthesizing…';
+
+  try {
+    const res = await fetch('/api/admin/test-tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'This is a test of the text to speech system.' }),
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      title.textContent = '✓ TTS working';
+      result.className = 'test-result visible';
+      body.innerHTML =
+        '<div style="font-family:var(--font-mono);font-size:0.75rem;color:var(--text-secondary);margin-bottom:10px;">' +
+          'Synthesized in <strong style="color:var(--green)">' + data.latency_ms + 'ms</strong>' +
+          ' — Duration: <strong style="color:var(--text-primary)">' + data.duration_ms + 'ms</strong>' +
+        '</div>' +
+        '<audio controls autoplay style="width:100%;margin-top:6px;"><source src="' + data.audio_url + '" type="audio/wav"></audio>';
+    } else {
+      title.textContent = '✗ TTS failed';
+      result.className = 'test-result visible error';
+      body.innerHTML = '<div class="test-qa" style="border-left:3px solid var(--red)"><h4 style="color:var(--red)">Error</h4><p>' + (data.error || 'Unknown error') + '</p></div>';
+    }
+  } catch (e) {
+    title.textContent = '✗ Request failed';
+    result.className = 'test-result visible error';
+    body.innerHTML = '<div class="test-qa" style="border-left:3px solid var(--red)"><h4 style="color:var(--red)">Error</h4><p>' + e.message + '</p></div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Test TTS';
   }
 }
 

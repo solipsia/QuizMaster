@@ -66,6 +66,28 @@ async def lifespan(app: FastAPI):
         audio_cleanup_loop(audio_dir, pool, config_ref)
     )
 
+    # Pre-generate welcome audio (best-effort, non-blocking)
+    async def _gen_welcome():
+        try:
+            audio_path = audio_dir / "welcome.wav"
+            text_path = audio_dir / "welcome.txt"
+            text = config.device.welcome_text
+            need_gen = not audio_path.exists()
+            if not need_gen:
+                try:
+                    if text_path.read_text(encoding="utf-8").strip() != text:
+                        need_gen = True
+                except FileNotFoundError:
+                    need_gen = True
+            if need_gen:
+                await tts_client.synthesize(text, audio_path)
+                text_path.write_text(text, encoding="utf-8")
+                logger.info("Welcome audio generated")
+        except Exception as e:
+            logger.warning("Welcome audio generation failed (will retry on first request): %s", e)
+
+    asyncio.create_task(_gen_welcome())
+
     logger.info("Quiz Service started — pool target: %d", config.pool.target_size)
 
     yield
