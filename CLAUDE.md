@@ -137,7 +137,7 @@ On the standard ESP32, GPIO numbers match directly — no D-pin mapping indirect
 - Backlight (LED pin): tie to 3V3 for always-on, or connect to a GPIO for PWM brightness control.
 - SPI clock: 27 MHz is the safe maximum for ILI9488 (40 MHz may cause artifacts).
 - **Touch Y-axis is inverted**: With rotation 1 (landscape), `tft.getTouch()` returns Y values flipped. Apply `ty = tft.height() - 1 - ty` after reading. Calibration data: `{ 300, 3600, 300, 3600, 3 }`.
-- **ILI9488 panel color inversion**: This ILI9488 panel has inherent color inversion — without `tft.invertDisplay(true)`, RGB565 colors display as their bitwise complement (e.g. red→cyan, blue→yellow). The existing UI color palette (`COL_GOLD`, `COL_CYAN`, etc.) was tuned while the display was in the default (inverted) state, so those constants produce the intended visual appearance WITHOUT `invertDisplay(true)`. If you need true RGB565 colors (e.g. for the splash logo), call `tft.invertDisplay(true)` before drawing and `tft.invertDisplay(false)` after to restore the UI palette. Do NOT add `#define TFT_INVERSION_ON` globally — it would fix raw colors but break every existing UI color constant.
+- **ILI9488 panel color inversion**: This ILI9488 panel has inherent color inversion — without `tft.invertDisplay(true)`, RGB565 colors display as their bitwise complement (e.g. red→cyan, gold→blue). The firmware calls `tft.invertDisplay(true)` once during the splash screen and leaves it active permanently, so all UI color constants (which use standard RGB values from the design spec) display correctly. Do NOT add `#define TFT_INVERSION_ON` globally — use the runtime `invertDisplay(true)` call instead.
 
 ### I2S — use ESP-IDF 5.x API
 Use `driver/i2s_std.h` (same API as before):

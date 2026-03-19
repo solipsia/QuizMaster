@@ -419,6 +419,24 @@ textarea {
 
 .chip:hover { border-color: var(--border-bright); }
 
+.chip.disabled {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.chip-toggle {
+  background: none;
+  border: none;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: all 0.15s;
+  color: var(--green);
+}
+
+.chip.disabled .chip-toggle { color: var(--text-dim); }
+
 @keyframes chip-in {
   from { opacity: 0; transform: scale(0.9); }
   to { opacity: 1; transform: scale(1); }
@@ -603,6 +621,49 @@ textarea {
 ::-webkit-scrollbar-track { background: var(--bg-deep); }
 ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* ─── TOGGLE CHECKBOX ─── */
+.toggle-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toggle-field input[type="checkbox"] {
+  width: 36px;
+  height: 20px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.toggle-field input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: all 0.2s;
+}
+
+.toggle-field input[type="checkbox"]:checked {
+  background: var(--green-glow);
+  border-color: var(--green);
+}
+
+.toggle-field input[type="checkbox"]:checked::after {
+  left: 18px;
+  background: var(--green);
+}
 
 /* ─── TOOLTIP ─── */
 .tooltip-wrap {
@@ -799,6 +860,44 @@ textarea {
     </div>
   </div>
 
+  <!-- EASTER EGG -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Easter Egg</span>
+    </div>
+    <div class="panel-body">
+      <div class="toggle-field">
+        <input type="checkbox" id="easterEggEnabled" onchange="autoSaveImmediate()">
+        <label for="easterEggEnabled" style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-secondary);cursor:pointer;">Enable Easter Egg Mode</label>
+      </div>
+      <div class="field">
+        <label>Easter Egg Question</label>
+        <input type="text" id="easterEggQuestion" placeholder="Enter a custom question...">
+      </div>
+      <div class="field">
+        <label>Easter Egg Answer</label>
+        <input type="text" id="easterEggAnswer" placeholder="Enter the answer...">
+      </div>
+      <div class="field" style="max-width:200px;">
+        <label>Probability</label>
+        <div class="input-with-suffix">
+          <input type="number" id="easterEggProbability" min="1" max="100" placeholder="10">
+          <span class="input-suffix">%</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn primary" onclick="generateEasterEgg()" id="genEasterEggBtn">Generate Easter Egg</button>
+      </div>
+      <div class="test-result" id="easterEggResult">
+        <div class="test-result-header">
+          <span id="easterEggResultTitle">Easter Egg</span>
+          <button class="test-result-close" onclick="document.getElementById('easterEggResult').className='test-result'">&#10005;</button>
+        </div>
+        <div id="easterEggResultBody"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- TEXT-TO-SPEECH -->
   <div class="panel">
     <div class="panel-header">
@@ -965,6 +1064,7 @@ textarea {
 // ─── STATE ───
 const DEFAULT_PROMPT = "You are a quiz master. Generate a trivia question and answer. The category is {{category}} and the difficulty level is {{difficulty}}. Return JSON with 'question' and 'answer' fields.";
 let categories = [];
+let disabledCategories = [];
 
 const PROVIDER_DEFAULTS = {
   google:  { model: 'models/gemini-2.5-flash',  api_base_url: 'https://generativelanguage.googleapis.com/v1beta', api_key_env: 'GOOGLE_API_KEY' },
@@ -1003,9 +1103,14 @@ function renderCategories() {
   container.innerHTML = '';
 
   categories.forEach((cat, i) => {
+    const isEnabled = !disabledCategories.includes(cat);
     const chip = document.createElement('div');
-    chip.className = 'chip';
-    chip.innerHTML = cat + '<button class="remove" onclick="removeCategory(' + i + ')">×</button>';
+    chip.className = 'chip' + (isEnabled ? '' : ' disabled');
+    chip.innerHTML =
+      '<span class="chip-toggle" onclick="toggleCategory(\'' + cat.replace(/'/g, "\\'") + '\')" title="' + (isEnabled ? 'Enabled — click to disable' : 'Disabled — click to enable') + '">' +
+        (isEnabled ? '●' : '○') + '</span>' +
+      '<span style="cursor:pointer;" onclick="toggleCategory(\'' + cat.replace(/'/g, "\\'") + '\')">' + cat + '</span>' +
+      '<button class="remove" onclick="removeCategory(' + i + ')">×</button>';
     container.appendChild(chip);
   });
 
@@ -1017,7 +1122,22 @@ function renderCategories() {
 }
 
 function removeCategory(index) {
+  const cat = categories[index];
   categories.splice(index, 1);
+  // Also remove from disabled list if present
+  const di = disabledCategories.indexOf(cat);
+  if (di >= 0) disabledCategories.splice(di, 1);
+  renderCategories();
+  autoSaveImmediate();
+}
+
+function toggleCategory(name) {
+  const idx = disabledCategories.indexOf(name);
+  if (idx >= 0) {
+    disabledCategories.splice(idx, 1);
+  } else {
+    disabledCategories.push(name);
+  }
   renderCategories();
   autoSaveImmediate();
 }
@@ -1111,8 +1231,15 @@ function populateForm(cfg) {
   // Quiz
   setDifficulty(cfg.quiz?.difficulty || 'medium');
   categories = cfg.quiz?.categories || [];
+  disabledCategories = cfg.quiz?.disabled_categories || [];
   renderCategories();
   document.getElementById('systemPrompt').value = cfg.quiz?.system_prompt || DEFAULT_PROMPT;
+
+  // Easter Egg
+  document.getElementById('easterEggEnabled').checked = cfg.easter_egg?.enabled || false;
+  document.getElementById('easterEggQuestion').value = cfg.easter_egg?.question_text || '';
+  document.getElementById('easterEggAnswer').value = cfg.easter_egg?.answer_text || '';
+  document.getElementById('easterEggProbability').value = cfg.easter_egg?.probability_percent ?? 10;
 
   // TTS
   document.getElementById('piperUrl').value = cfg.tts?.piper_url || '';
@@ -1186,8 +1313,15 @@ async function saveConfig() {
     },
     quiz: {
       categories: categories,
+      disabled_categories: disabledCategories,
       difficulty: getDifficulty(),
       system_prompt: document.getElementById('systemPrompt').value
+    },
+    easter_egg: {
+      enabled: document.getElementById('easterEggEnabled').checked,
+      question_text: document.getElementById('easterEggQuestion').value,
+      answer_text: document.getElementById('easterEggAnswer').value,
+      probability_percent: parseInt(document.getElementById('easterEggProbability').value) || 10
     },
     device: {
       welcome_text: document.getElementById('welcomeText').value || 'Welcome to Quiz Master',
@@ -1546,16 +1680,70 @@ function collectPricing() {
   return result;
 }
 
+// ─── EASTER EGG ───
+async function generateEasterEgg() {
+  const btn = document.getElementById('genEasterEggBtn');
+  const question = document.getElementById('easterEggQuestion').value.trim();
+  const answer = document.getElementById('easterEggAnswer').value.trim();
+
+  if (!question || !answer) {
+    showBanner('Please enter both question and answer text', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-inline"></span>Generating…';
+
+  // Save config first so text is persisted
+  await saveConfig();
+
+  try {
+    const res = await fetch('/api/admin/generate-easter-egg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question_text: question, answer_text: answer })
+    });
+    const data = await res.json();
+
+    const result = document.getElementById('easterEggResult');
+    const body = document.getElementById('easterEggResultBody');
+    const title = document.getElementById('easterEggResultTitle');
+
+    if (data.ok) {
+      title.textContent = '\u2713 Easter egg audio generated';
+      result.className = 'test-result visible';
+      body.innerHTML =
+        '<div style="font-family:var(--font-mono);font-size:0.75rem;color:var(--text-secondary);margin-bottom:10px;">' +
+          'Question TTS: <strong style="color:var(--green)">' + data.question_latency_ms + 'ms</strong>' +
+          ' \u2014 Answer TTS: <strong style="color:var(--green)">' + data.answer_latency_ms + 'ms</strong>' +
+        '</div>' +
+        '<div style="margin-bottom:8px;"><label style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-dim);">Question Audio</label>' +
+          '<audio controls style="width:100%;margin-top:4px;"><source src="' + data.question_audio_url + '" type="audio/wav"></audio></div>' +
+        '<div><label style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-dim);">Answer Audio</label>' +
+          '<audio controls style="width:100%;margin-top:4px;"><source src="' + data.answer_audio_url + '" type="audio/wav"></audio></div>';
+    } else {
+      title.textContent = '\u2717 Generation failed';
+      result.className = 'test-result visible error';
+      body.innerHTML = '<div class="test-qa" style="border-left:3px solid var(--red)"><h4 style="color:var(--red)">Error</h4><p>' + (data.error || 'Unknown error') + '</p></div>';
+    }
+  } catch (e) {
+    showBanner('Easter egg generation failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate Easter Egg';
+  }
+}
+
 // ─── AUTO-SAVE BINDINGS ───
 function bindAutoSave() {
   // Text inputs: debounced save on input
-  ['llmModel', 'llmBaseUrl', 'llmApiKeyEnv', 'systemPrompt', 'piperUrl', 'welcomeText'].forEach(id => {
+  ['llmModel', 'llmBaseUrl', 'llmApiKeyEnv', 'systemPrompt', 'piperUrl', 'welcomeText', 'easterEggQuestion', 'easterEggAnswer'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', autoSave);
   });
 
   // Number inputs: debounced save on input
-  ['llmTemperature', 'llmMaxTokens', 'poolTargetSize', 'poolMinReady', 'poolBackfillTrigger', 'audioTtl', 'idleTimeout'].forEach(id => {
+  ['llmTemperature', 'llmMaxTokens', 'poolTargetSize', 'poolMinReady', 'poolBackfillTrigger', 'audioTtl', 'idleTimeout', 'easterEggProbability'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', autoSave);
   });

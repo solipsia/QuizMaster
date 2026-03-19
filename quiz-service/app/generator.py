@@ -32,7 +32,11 @@ class QuestionGenerator:
         total_start = time.time()
 
         if category is None:
-            category = random.choice(self.config.quiz.categories)
+            enabled = [c for c in self.config.quiz.categories
+                       if c not in self.config.quiz.disabled_categories]
+            if not enabled:
+                enabled = self.config.quiz.categories
+            category = random.choice(enabled)
 
         # Build prompt
         prompt = self.config.quiz.system_prompt.replace(

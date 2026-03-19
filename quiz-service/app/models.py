@@ -97,6 +97,7 @@ class StatusResponse(BaseModel):
     pool_paused: bool = False
     pool_pause_reason: str = ""
     categories: list[str] = []
+    disabled_categories: list[str] = []
     difficulty: str = "medium"
     questions_served: int = 0
     llm_api: LLMStatus = LLMStatus()
@@ -145,12 +146,20 @@ class QuizConfig(BaseModel):
     categories: list[str] = [
         "general", "science", "history", "geography", "entertainment", "sports"
     ]
+    disabled_categories: list[str] = []
     difficulty: str = "medium"
     system_prompt: str = (
         "You are a quiz master. Generate a trivia question and answer. "
         "The category is {{category}} and the difficulty level is {{difficulty}}. "
         "Return JSON with 'question' and 'answer' fields."
     )
+
+
+class EasterEggConfig(BaseModel):
+    enabled: bool = False
+    question_text: str = ""
+    answer_text: str = ""
+    probability_percent: int = 10
 
 
 class DeviceConfig(BaseModel):
@@ -164,4 +173,5 @@ class ServiceConfig(BaseModel):
     pool: PoolConfig = PoolConfig()
     quiz: QuizConfig = QuizConfig()
     device: DeviceConfig = DeviceConfig()
+    easter_egg: EasterEggConfig = EasterEggConfig()
     pricing: dict[str, list[float]] = {}  # model -> [input_per_mtok, output_per_mtok]

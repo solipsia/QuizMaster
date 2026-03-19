@@ -53,6 +53,7 @@ async def get_status(request: Request):
         pool_paused=worker.is_paused,
         pool_pause_reason=worker.pause_reason,
         categories=config.quiz.categories,
+        disabled_categories=config.quiz.disabled_categories,
         difficulty=config.quiz.difficulty,
         questions_served=metrics.questions_served,
         llm_api=LLMStatus(
@@ -223,6 +224,48 @@ async def test_tts(request: Request):
         }
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
+
+
+@router.post("/api/admin/generate-easter-egg")
+async def generate_easter_egg(request: Request):
+    """Generate TTS audio for the easter egg question and answer."""
+    state = request.app.state
+    tts_client = state.tts_client
+    audio_dir: Path = state.audio_dir
+
+    body = await request.json()
+    question_text = body.get("question_text", "")
+    answer_text = body.get("answer_text", "")
+
+    if not question_text or not answer_text:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "Both question and answer text required"},
+        )
+
+    try:
+        q_path = audio_dir / "easter_egg_q.wav"
+        t0 = time.time()
+        await tts_client.synthesize(question_text, q_path)
+        q_ms = int((time.time() - t0) * 1000)
+
+        a_path = audio_dir / "easter_egg_a.wav"
+        t0 = time.time()
+        await tts_client.synthesize(answer_text, a_path)
+        a_ms = int((time.time() - t0) * 1000)
+
+        base = str(request.base_url).rstrip("/")
+        return {
+            "ok": True,
+            "question_latency_ms": q_ms,
+            "answer_latency_ms": a_ms,
+            "question_audio_url": f"{base}/audio/easter_egg_q.wav",
+            "answer_audio_url": f"{base}/audio/easter_egg_a.wav",
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500, content={"ok": False, "error": str(e)}
+        )
 
 
 @router.post("/api/admin/generate")

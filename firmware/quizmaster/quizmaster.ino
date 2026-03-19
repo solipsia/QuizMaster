@@ -17,6 +17,7 @@
 #include <ArduinoJson.h>
 #include "driver/i2s_std.h"
 #include "esp_sleep.h"
+#include "logo_bitmap.h"
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Configuration
@@ -62,6 +63,7 @@ static const uint16_t COL_TEXT_DIM   = RGB565(112, 122, 144);   // #707A90
 static const uint16_t COL_GREEN      = RGB565(0, 230, 118);    // #00E676
 static const uint16_t COL_RED        = RGB565(255, 61, 87);    // #FF3D57
 static const uint16_t COL_AUDIO      = RGB565(0, 170, 255);    // #00AAFF
+static const uint16_t COL_LOGO_RED   = RGB565(255, 0, 0);      // #FF0000
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Layout Constants (480 x 320 landscape)
@@ -75,11 +77,15 @@ static const int PAD   = 12;                           // horizontal padding
 static const int USE_W = SCR_W - 2 * PAD;             // 456 usable width
 static const int BTN_Y = 250, BTN_H = 60, BTN_R = 8; // button geometry
 
-// Answer-screen split: CATEGORY (left) + NEXT QUESTION (right)
+// Answer-screen split: CATEGORY (left) + NEXT QUESTION (middle) + REPLAY (right)
 static const int SPLIT_W   = 145;                     // secondary button width
 static const int SPLIT_GAP = 12;
 static const int SPLIT_R_X = PAD + SPLIT_W + SPLIT_GAP;
-static const int SPLIT_R_W = USE_W - SPLIT_W - SPLIT_GAP;
+
+// Replay button
+static const int REPLAY_W   = 50;
+static const int REPLAY_GAP = 8;
+static const int REPLAY_X   = PAD + USE_W - REPLAY_W; // 418
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -98,14 +104,33 @@ struct QuizQ {
 struct AudioCmd { char url[AUDIO_URL_MAX]; };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Categories
+// Categories (dynamic, fetched from service)
 // ═══════════════════════════════════════════════════════════════════════════
 
-static const char* CATS[] = {
-    "general", "science", "history", "geography",
-    "entertainment", "sports", "all"
-};
-static const int NUM_CATS = sizeof(CATS) / sizeof(CATS[0]);
+#define MAX_CATS 12
+static char  cat_names[MAX_CATS][24];
+static bool  cat_enabled[MAX_CATS];
+static int   num_cats = 0;
+
+// Pick a random enabled category name. Returns NULL if none enabled.
+static const char* pick_category() {
+    int enabled_count = 0;
+    for (int i = 0; i < num_cats; i++) {
+        if (cat_enabled[i]) enabled_count++;
+    }
+    if (enabled_count == 0) return NULL;
+    if (enabled_count == num_cats) return "all";  // all enabled → no filter
+
+    int pick = random(0, enabled_count);
+    int j = 0;
+    for (int i = 0; i < num_cats; i++) {
+        if (cat_enabled[i]) {
+            if (j == pick) return cat_names[i];
+            j++;
+        }
+    }
+    return "all";
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Global State
@@ -117,7 +142,6 @@ static uint16_t calData[5] = { 300, 3600, 300, 3600, 3 };
 // Screen / UI state
 static Screen   cur_screen   = S_SPLASH;
 static Error    cur_error    = E_NONE;
-static int      cat_idx      = NUM_CATS - 1;  // default to "all" categories
 static int      q_count      = 0;       // questions answered this session
 static bool     wifi_up      = false;
 static bool     prev_wifi_up = false;
@@ -348,6 +372,45 @@ static bool connect_wifi(uint32_t timeout) {
 //  QUIZ API
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Fetch categories from service status endpoint
+static void fetch_categories() {
+    HTTPClient http;
+    http.begin(String(SERVICE_BASE) + "/api/admin/status");
+    http.setTimeout(FETCH_TIMEOUT_MS);
+    int code = http.GET();
+    if (code == HTTP_CODE_OK) {
+        String body = http.getString();
+        JsonDocument doc;
+        if (!deserializeJson(doc, body)) {
+            JsonArray cats = doc["categories"];
+            num_cats = 0;
+            for (JsonVariant c : cats) {
+                if (num_cats >= MAX_CATS) break;
+                const char* name = c.as<const char*>();
+                if (name) {
+                    strncpy(cat_names[num_cats], name, 23);
+                    cat_names[num_cats][23] = 0;
+                    cat_enabled[num_cats] = true;
+                    num_cats++;
+                }
+            }
+        }
+    }
+    http.end();
+
+    // Fallback if fetch fails
+    if (num_cats == 0) {
+        const char* defaults[] = {"general", "science", "history", "geography", "entertainment", "sports"};
+        for (int i = 0; i < 6; i++) {
+            strncpy(cat_names[i], defaults[i], 23);
+            cat_names[i][23] = 0;
+            cat_enabled[i] = true;
+        }
+        num_cats = 6;
+    }
+    Serial.printf("Categories: %d loaded\n", num_cats);
+}
+
 // Fetch a question. On failure, *err is set (if non-null). Returns .valid = false on error.
 static QuizQ fetch_question(const char* category, Error* err = nullptr) {
     QuizQ q;
@@ -483,27 +546,49 @@ static void btn_error(const char* label, int x, int y, int w, int h) {
     tft.drawString(label, x + w / 2, y + h / 2);
 }
 
-// Category badge — draws in header at left
+// Replay button — small square with circular arrow icon
+static void btn_replay(int x, int y, int w, int h) {
+    tft.fillRoundRect(x, y, w, h, 6, COL_BTN_BG);
+    tft.drawRoundRect(x, y, w, h, 6, COL_GOLD_DIM);
+    tft.drawRoundRect(x+1, y+1, w-2, h-2, 5, COL_GOLD_DIM);
+
+    int cx = x + w / 2, cy = y + h / 2;
+
+    // Draw 270-degree arc (skip 30-degree gap at top-right)
+    for (int a = 30; a <= 300; a++) {
+        float rad = a * 0.01745329f;
+        tft.drawPixel(cx + (int)(10.0f * cosf(rad)), cy - (int)(10.0f * sinf(rad)), COL_TEXT);
+        tft.drawPixel(cx + (int)(9.0f * cosf(rad)),  cy - (int)(9.0f * sinf(rad)),  COL_TEXT);
+    }
+
+    // Arrowhead at 30-degree end (upper-right), pointing clockwise
+    int ax = cx + 8, ay = cy - 4;
+    tft.fillTriangle(ax - 3, ay - 4, ax + 3, ay + 1, ax - 4, ay + 3, COL_TEXT);
+}
+
+// Category badge — shows enabled count in header
 static void draw_badge(uint16_t bg) {
-    const char* cat = CATS[cat_idx];
-    char up[16]; int i = 0;
-    while (cat[i] && i < 14) { up[i] = toupper(cat[i]); i++; }
-    up[i] = 0;
+    int enabled = 0;
+    for (int i = 0; i < num_cats; i++) {
+        if (cat_enabled[i]) enabled++;
+    }
+
+    char label[20];
+    if (enabled == num_cats)    snprintf(label, sizeof(label), "ALL");
+    else if (enabled == 0)      snprintf(label, sizeof(label), "NONE");
+    else                        snprintf(label, sizeof(label), "%d/%d", enabled, num_cats);
 
     tft.setTextFont(2);
     tft.setTextDatum(TL_DATUM);
-    // Truncate if needed
-    while (tft.textWidth(up) > 108 && strlen(up) > 4) {
-        up[strlen(up) - 1] = 0;
-        int l = strlen(up); up[l] = '.'; up[l+1] = '.'; up[l+2] = 0;
-    }
-    int tw = tft.textWidth(up);
+
+    int tw = tft.textWidth(label);
     int bw = tw + 12, bh = 24;
-    // Clear old badge area (covers widest possible badge)
     tft.fillRect(PAD, 8, 130, 24, COL_PANEL);
-    tft.fillRoundRect(PAD, 8, bw, bh, 4, bg);
-    tft.setTextColor(COL_BG, bg);
-    tft.drawString(up, PAD + 6, 12);
+
+    uint16_t badge_bg = (enabled == 0) ? COL_RED : bg;
+    tft.fillRoundRect(PAD, 8, bw, bh, 4, badge_bg);
+    tft.setTextColor(COL_BG, badge_bg);
+    tft.drawString(label, PAD + 6, 12);
 }
 
 // WiFi icon — concentric arcs
@@ -572,38 +657,133 @@ static void draw_diamond(int cx, int cy, int s, uint16_t c) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  CATEGORY GRID  — drawn on the main/category selection screen
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Grid layout params (reused for drawing + hit testing)
+static int cat_col_w, cat_row_h, cat_start_y;
+static const int CAT_COLS = 2, CAT_COL_GAP = 10, CAT_ROW_GAP = 6;
+
+static void calc_grid_layout() {
+    int rows = (num_cats + CAT_COLS - 1) / CAT_COLS;
+    cat_col_w = (USE_W - CAT_COL_GAP) / CAT_COLS;        // 223
+    int avail_h = CTN_H - 16;                              // 184
+    cat_row_h = (avail_h - (rows - 1) * CAT_ROW_GAP) / rows;
+    if (cat_row_h > 50) cat_row_h = 50;
+    int total_h = rows * cat_row_h + (rows - 1) * CAT_ROW_GAP;
+    cat_start_y = CTN_Y + (CTN_H - total_h) / 2;
+}
+
+static void draw_cat_button(int idx) {
+    int col = idx % CAT_COLS;
+    int row = idx / CAT_COLS;
+    int x = PAD + col * (cat_col_w + CAT_COL_GAP);
+    int y = cat_start_y + row * (cat_row_h + CAT_ROW_GAP);
+    bool enabled = cat_enabled[idx];
+
+    uint16_t bg     = enabled ? COL_BTN_BG   : COL_BG;
+    uint16_t border = enabled ? COL_GOLD     : COL_TEXT_DIM;
+    uint16_t txt    = enabled ? COL_GOLD     : COL_TEXT_DIM;
+
+    tft.fillRoundRect(x, y, cat_col_w, cat_row_h, 6, bg);
+    tft.drawRoundRect(x, y, cat_col_w, cat_row_h, 6, border);
+    if (enabled)
+        tft.drawRoundRect(x + 1, y + 1, cat_col_w - 2, cat_row_h - 2, 5, border);
+
+    // Capitalize first letter
+    char label[24];
+    int j = 0;
+    const char* name = cat_names[idx];
+    while (name[j] && j < 22) { label[j] = (j == 0) ? toupper(name[j]) : name[j]; j++; }
+    label[j] = 0;
+
+    tft.setTextFont(2);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(txt, bg);
+    tft.drawString(label, x + cat_col_w / 2, y + cat_row_h / 2);
+}
+
+static void draw_category_grid() {
+    if (num_cats == 0) return;
+    calc_grid_layout();
+    for (int i = 0; i < num_cats; i++) draw_cat_button(i);
+}
+
+// Returns true if any category is enabled
+static bool any_cats_enabled() {
+    for (int i = 0; i < num_cats; i++) {
+        if (cat_enabled[i]) return true;
+    }
+    return false;
+}
+
+static void draw_main_action() {
+    clear_action();
+    if (any_cats_enabled()) {
+        btn_primary("NEW QUESTION", PAD, BTN_Y, USE_W, BTN_H);
+    } else {
+        tft.fillRoundRect(PAD, BTN_Y, USE_W, BTN_H, BTN_R, COL_BTN_BG);
+        tft.setTextColor(COL_TEXT_DIM, COL_BTN_BG);
+        tft.setTextDatum(MC_DATUM);
+        tft.setFreeFont(&FreeSansBold12pt7b);
+        tft.drawString("SELECT A CATEGORY", PAD + USE_W / 2, BTN_Y + BTN_H / 2);
+    }
+}
+
+// Handle tap on the category grid — returns true if a category was toggled
+static bool handle_category_tap(uint16_t tx, uint16_t ty) {
+    if (num_cats == 0) return false;
+
+    int col = (tx - PAD) / (cat_col_w + CAT_COL_GAP);
+    int row = (ty - cat_start_y) / (cat_row_h + CAT_ROW_GAP);
+    if (col < 0 || col >= CAT_COLS || row < 0) return false;
+
+    int idx = row * CAT_COLS + col;
+    if (idx >= num_cats) return false;
+
+    // Verify tap is within the button bounds (not in gap)
+    int bx = PAD + col * (cat_col_w + CAT_COL_GAP);
+    int by = cat_start_y + row * (cat_row_h + CAT_ROW_GAP);
+    if (tx < bx || tx >= bx + cat_col_w || ty < by || ty >= by + cat_row_h) return false;
+
+    cat_enabled[idx] = !cat_enabled[idx];
+    draw_cat_button(idx);
+    draw_badge(COL_CYAN);
+    draw_main_action();
+    Serial.printf("Category '%s' %s\n", cat_names[idx], cat_enabled[idx] ? "ON" : "OFF");
+    return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  SCREEN DRAWING
 // ═══════════════════════════════════════════════════════════════════════════
 
 static void scr_splash() {
-    tft.fillScreen(COL_BG);
-    tft.setFreeFont(&FreeSansBold18pt7b);
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextColor(COL_GOLD, COL_BG);
-    int cx = SCR_W / 2, cy = SCR_H / 2 - 10;
-    String logo = "QUIZMASTER";
-    int tw = tft.textWidth(logo);
-    draw_diamond(cx - tw / 2 - 20, cy, 6, COL_GOLD);
-    tft.drawString(logo, cx, cy);
-    // Decorative line
-    tft.fillRect(cx - 100, cy + 30, 200, 2, COL_GOLD_DIM);
+    tft.invertDisplay(true);
+    tft.fillScreen(TFT_BLACK);
+    int ox = (SCR_W - LOGO_WIDTH) / 2;
+    int oy = (SCR_H - LOGO_HEIGHT) / 2;
+    int bw = (LOGO_WIDTH + 7) / 8;
+    for (int j = 0; j < LOGO_HEIGHT; j++) {
+        int run = -1;
+        for (int i = 0; i <= LOGO_WIDTH; i++) {
+            bool set = i < LOGO_WIDTH &&
+                (pgm_read_byte(logo_bitmap + j * bw + i / 8) & (1 << (i & 7)));
+            if (set && run < 0) run = i;
+            else if (!set && run >= 0) {
+                tft.drawFastHLine(ox + run, oy + j, i - run, COL_LOGO_RED);
+                run = -1;
+            }
+        }
+    }
 }
 
 static void scr_main() {
     draw_header();
     clear_content();
-    clear_action();
 
-    tft.setFreeFont(&FreeSansBold18pt7b);
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextColor(COL_GOLD, COL_BG);
-    tft.drawString("QUIZMASTER", SCR_W / 2, CTN_Y + CTN_H / 2 - 15);
-
-    tft.setTextFont(2);
-    tft.setTextColor(wifi_up ? COL_TEXT_DIM : COL_GOLD_DIM, COL_BG);
-    tft.drawString(wifi_up ? "ready" : "connecting...", SCR_W / 2, CTN_Y + CTN_H / 2 + 20);
-
-    btn_primary("NEW QUESTION", PAD, BTN_Y, USE_W, BTN_H);
+    draw_category_grid();
+    draw_main_action();
 }
 
 static void scr_loading() {
@@ -632,13 +812,22 @@ static void scr_question() {
     clear_content();
     clear_action();
 
-    // Choose font: try 18pt, fall back to 12pt if >6 lines
+    int avail_h = (ACT_Y - 8) - (CTN_Y + 16);  // vertical space for text
+
+    // Try 18pt first, fall back to 12pt if text won't fit
     tft.setFreeFont(&FreeSans18pt7b);
     int n = count_lines(cur_q.q_text.c_str(), USE_W);
-    if (n > 6) tft.setFreeFont(&FreeSans12pt7b);
+    int max_lines = avail_h / (tft.fontHeight() + 2);
+    if (n > max_lines) {
+        tft.setFreeFont(&FreeSans12pt7b);
+    }
 
     draw_wrapped(cur_q.q_text.c_str(), PAD, CTN_Y + 16, USE_W, ACT_Y - 8, COL_TEXT, COL_BG);
-    btn_primary("REVEAL ANSWER", PAD, BTN_Y, USE_W, BTN_H);
+
+    // REVEAL ANSWER + replay button
+    int reveal_w = USE_W - REPLAY_W - REPLAY_GAP;
+    btn_primary("REVEAL ANSWER", PAD, BTN_Y, reveal_w, BTN_H);
+    btn_replay(REPLAY_X, BTN_Y, REPLAY_W, BTN_H);
 }
 
 static void scr_answer() {
@@ -665,9 +854,11 @@ static void scr_answer() {
     tft.setFreeFont(&FreeSans24pt7b);
     draw_wrapped(cur_q.a_text.c_str(), PAD, ty, USE_W, ACT_Y - 4, COL_GREEN, COL_BG);
 
-    // Split buttons
+    // Split buttons: CATEGORY + NEXT QUESTION + REPLAY
+    int next_w = USE_W - SPLIT_W - SPLIT_GAP - REPLAY_W - REPLAY_GAP;
     btn_secondary("CATEGORY", PAD, BTN_Y, SPLIT_W, BTN_H);
-    btn_primary("NEXT QUESTION", SPLIT_R_X, BTN_Y, SPLIT_R_W, BTN_H);
+    btn_primary("NEXT QUESTION", SPLIT_R_X, BTN_Y, next_w, BTN_H);
+    btn_replay(REPLAY_X, BTN_Y, REPLAY_W, BTN_H);
 }
 
 static void scr_error() {
@@ -701,23 +892,14 @@ static void scr_error() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  CATEGORY CYCLING
-// ═══════════════════════════════════════════════════════════════════════════
-
-static void cycle_category() {
-    cat_idx = (cat_idx + 1) % NUM_CATS;
-    draw_badge(COL_GOLD);   // flash gold
-    delay(150);
-    draw_badge(COL_CYAN);   // back to cyan
-    Serial.printf("Category → %s\n", CATS[cat_idx]);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 //  TOUCH HANDLING
 // ═══════════════════════════════════════════════════════════════════════════
 
 // Attempt to fetch and show a question (handles loading + error transitions)
 static void do_fetch_and_show() {
+    const char* cat = pick_category();
+    if (!cat) return;  // no categories enabled
+
     cur_screen = S_LOADING;
     scr_loading();
 
@@ -726,7 +908,7 @@ static void do_fetch_and_show() {
     }
 
     Error err = E_NONE;
-    QuizQ q = fetch_question(CATS[cat_idx], &err);
+    QuizQ q = fetch_question(cat, &err);
     if (q.valid) {
         cur_q = q;
         q_count++;
@@ -750,22 +932,34 @@ static void handle_touch() {
     last_touch = millis();
 
     // Touch zones
-    bool in_cat    = (ty < HDR_H && tx < SCR_W / 3);
-    bool in_action = (ty >= ACT_Y);
-    bool in_act_l  = (in_action && tx < PAD + SPLIT_W + SPLIT_GAP);
-    bool in_act_r  = (in_action && tx >= SPLIT_R_X);
+    bool in_cat     = (ty < HDR_H && tx < SCR_W / 3);
+    bool in_action  = (ty >= ACT_Y);
+    bool in_replay  = (in_action && tx >= REPLAY_X);
+    bool in_act_l   = (in_action && tx < PAD + SPLIT_W + SPLIT_GAP);
+    bool in_content = (ty >= CTN_Y && ty < ACT_Y);
 
     switch (cur_screen) {
 
     case S_MAIN:
-        if (in_cat)         cycle_category();
-        else if (in_action) do_fetch_and_show();
+        if (in_content) {
+            handle_category_tap(tx, ty);
+        } else if (in_action && any_cats_enabled()) {
+            do_fetch_and_show();
+        }
         break;
 
     case S_QUESTION:
         if (in_cat) {
-            cycle_category();
+            // Go back to category selection
+            stop_audio();
+            cur_screen = S_MAIN;
+            scr_main();
+        } else if (in_replay) {
+            // Replay question audio
+            stop_audio();
+            play_audio(cur_q.q_audio);
         } else if (in_action) {
+            // Reveal answer
             stop_audio();
             cur_screen = S_ANSWER;
             scr_answer();
@@ -776,7 +970,11 @@ static void handle_touch() {
         break;
 
     case S_ANSWER:
-        if (in_act_r) {
+        if (in_replay) {
+            // Replay answer audio
+            stop_audio();
+            play_audio(cur_q.a_audio);
+        } else if (in_action && tx >= SPLIT_R_X) {
             // NEXT QUESTION
             stop_audio();
             if (pre_done && pre_q.valid) {
@@ -793,7 +991,10 @@ static void handle_touch() {
                 pre_done    = false;
             }
         } else if (in_cat || in_act_l) {
-            cycle_category();
+            // Go back to category selection
+            stop_audio();
+            cur_screen = S_MAIN;
+            scr_main();
         }
         break;
 
@@ -896,6 +1097,19 @@ void setup() {
     }
     wifi_up = (WiFi.status() == WL_CONNECTED);
 
+    // Fetch categories from service
+    if (wifi_up) fetch_categories();
+    else {
+        // Use fallback defaults
+        const char* defaults[] = {"general", "science", "history", "geography", "entertainment", "sports"};
+        for (int i = 0; i < 6; i++) {
+            strncpy(cat_names[i], defaults[i], 23);
+            cat_names[i][23] = 0;
+            cat_enabled[i] = true;
+        }
+        num_cats = 6;
+    }
+
     // Initial battery read
     last_bat = 0;  // force immediate read
     update_battery();
@@ -945,23 +1159,18 @@ void loop() {
     // ── WiFi status change → refresh ──
     if (wifi_up != prev_wifi_up) {
         prev_wifi_up = wifi_up;
-        if (cur_screen == S_MAIN) {
-            // Update status text
-            tft.setTextFont(2);
-            tft.setTextDatum(MC_DATUM);
-            tft.fillRect(SCR_W / 2 - 80, CTN_Y + CTN_H / 2 + 12, 160, 20, COL_BG);
-            tft.setTextColor(wifi_up ? COL_TEXT_DIM : COL_GOLD_DIM, COL_BG);
-            tft.drawString(wifi_up ? "ready" : "connecting...", SCR_W / 2, CTN_Y + CTN_H / 2 + 20);
-        }
         if (cur_screen != S_SPLASH) draw_wifi();
     }
 
     // ── Prefetch during answer screen ──
     if (cur_screen == S_ANSWER && !pre_started && !pre_done) {
         pre_started = true;
-        pre_q = fetch_question(CATS[cat_idx]);   // err ignored for prefetch
-        pre_done = pre_q.valid;
-        Serial.printf("Prefetch: %s\n", pre_done ? "ok" : "failed");
+        const char* cat = pick_category();
+        if (cat) {
+            pre_q = fetch_question(cat);   // err ignored for prefetch
+            pre_done = pre_q.valid;
+            Serial.printf("Prefetch: %s\n", pre_done ? "ok" : "failed");
+        }
     }
 
     // ── Idle timeout → deep sleep ──
