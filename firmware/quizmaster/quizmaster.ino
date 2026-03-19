@@ -35,6 +35,7 @@ static const uint32_t WIFI_TIMEOUT_MS       = 10000;
 static const uint32_t FETCH_TIMEOUT_MS      = 10000;
 static const uint32_t INDICATOR_TOGGLE_MS   = 500;
 static const uint32_t SPLASH_HOLD_MS        = 2500;
+static const float    LOWBAT_THRESHOLD_V    = 3.3f;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Pin Assignments (ESP32 DevKitV1 — raw GPIO numbers)
@@ -92,7 +93,7 @@ static const int REPLAY_X   = PAD + USE_W - REPLAY_W; // 418
 // Types
 // ═══════════════════════════════════════════════════════════════════════════
 
-enum Screen { S_SPLASH, S_MAIN, S_LOADING, S_QUESTION, S_ANSWER, S_ERROR, S_CONFIG, S_QRCODE };
+enum Screen { S_SPLASH, S_MAIN, S_LOADING, S_QUESTION, S_ANSWER, S_ERROR, S_CONFIG, S_QRCODE, S_LOWBAT };
 enum Error  { E_NONE, E_WIFI, E_SERVICE, E_EMPTY };
 
 struct QuizQ {
@@ -677,7 +678,7 @@ static void draw_wifi() {
 
 // Battery voltage — right side of header
 static void draw_bat() {
-    tft.fillRect(452, 8, 28, 24, COL_PANEL);
+    tft.fillRect(446, 8, 34, 24, COL_PANEL);
     tft.setTextFont(2);
     tft.setTextDatum(TR_DATUM);
     tft.setTextColor(COL_TEXT_DIM, COL_PANEL);
@@ -1172,6 +1173,60 @@ static void scr_qrcode() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  LOW BATTERY SCREEN
+// ═══════════════════════════════════════════════════════════════════════════
+
+static void scr_lowbat() {
+    tft.fillScreen(TFT_BLACK);
+    tft.setFreeFont(&FreeSansBold18pt7b);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(COL_RED, TFT_BLACK);
+    tft.drawString("Battery Low", SCR_W / 2, SCR_H / 2 - 30);
+
+    char vbuf[16];
+    snprintf(vbuf, sizeof(vbuf), "%.2fV", bat_v);
+    tft.drawString(vbuf, SCR_W / 2, SCR_H / 2 + 30);
+}
+
+// Request TTS "Battery Low" from service, play it, then shut everything down
+static void enter_lowbat() {
+    stop_audio();
+
+    // Synthesize "Battery Low" via service TTS and play it
+    if (wifi_up) {
+        HTTPClient http;
+        http.begin(String(SERVICE_BASE) + "/api/admin/test-tts");
+        http.addHeader("Content-Type", "application/json");
+        http.setTimeout(FETCH_TIMEOUT_MS);
+        int code = http.POST("{\"text\":\"Battery Low\"}");
+        if (code == HTTP_CODE_OK) {
+            String body = http.getString();
+            JsonDocument doc;
+            if (deserializeJson(doc, body) == DeserializationError::Ok && doc["ok"].as<bool>()) {
+                const char* url = doc["audio_url"];
+                if (url) play_audio(String(url));
+            }
+        }
+        http.end();
+
+        // Wait for voice to finish playing
+        uint32_t t0 = millis();
+        while (audio_playing && millis() - t0 < 5000) delay(50);
+    }
+
+    // Shut down heavy consumers
+    stop_audio();
+    digitalWrite(PIN_AMP_SD, LOW);  // amp off
+    WiFi.disconnect(true);          // disconnect + power down WiFi
+    WiFi.mode(WIFI_OFF);
+    wifi_up = false;
+
+    cur_screen = S_LOWBAT;
+    scr_lowbat();
+    Serial.printf("LOW BATTERY: %.2fV — halted\n", bat_v);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  TOUCH HANDLING
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1202,6 +1257,8 @@ static void do_fetch_and_show() {
 }
 
 static void handle_touch() {
+    if (cur_screen == S_LOWBAT) return;  // no touch in low battery state
+
     uint16_t tx, ty;
     if (!tft.getTouch(&tx, &ty)) return;
     ty = tft.height() - 1 - ty;   // Y-axis inversion fix
@@ -1457,7 +1514,8 @@ void setup() {
         num_cats = 6;
     }
 
-    // Initial battery read
+    // Warm up ADC — first reads after boot are unreliable
+    for (int i = 0; i < 5; i++) { analogReadMilliVolts(PIN_BATTERY); delay(2); }
     last_bat = 0;  // force immediate read
     update_battery();
 
@@ -1475,6 +1533,18 @@ void setup() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 void loop() {
+    // ── Low battery — halt, only update voltage display ──
+    if (cur_screen == S_LOWBAT) {
+        update_battery();
+        static uint32_t lowbat_draw = 0;
+        if (millis() - lowbat_draw >= BATTERY_INTERVAL_MS) {
+            lowbat_draw = millis();
+            scr_lowbat();  // refresh voltage reading
+        }
+        delay(200);  // slow loop — nothing to do
+        return;
+    }
+
     wifi_up = (WiFi.status() == WL_CONNECTED);
 
     // ── Touch ──
@@ -1501,6 +1571,12 @@ void loop() {
     if (millis() - bat_draw >= BATTERY_INTERVAL_MS && cur_screen != S_SPLASH) {
         bat_draw = millis();
         draw_bat();
+
+        // Check for low battery (only on valid readings)
+        if (bat_v > 0 && bat_v <= LOWBAT_THRESHOLD_V) {
+            enter_lowbat();
+            return;
+        }
     }
 
     // ── WiFi status change → refresh ──
