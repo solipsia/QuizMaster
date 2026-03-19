@@ -1032,6 +1032,20 @@ textarea {
     </div>
   </div>
 
+  <!-- MISCELLANEOUS -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Miscellaneous</span>
+    </div>
+    <div class="panel-body">
+      <div class="field">
+        <label>App URL</label>
+        <input type="text" id="appUrl" placeholder="http://synology.local:8080/config">
+        <span class="hint">URL shown as QR code on the device for quick access from a phone</span>
+      </div>
+    </div>
+  </div>
+
   <!-- TOKEN PRICING -->
   <div class="panel">
     <div class="panel-header">
@@ -1256,6 +1270,9 @@ function populateForm(cfg) {
   document.getElementById('welcomeText').value = cfg.device?.welcome_text || 'Welcome to Quiz Master';
   document.getElementById('idleTimeout').value = cfg.device?.idle_timeout_seconds ?? 300;
 
+  // Miscellaneous
+  document.getElementById('appUrl').value = cfg.miscellaneous?.app_url || 'http://synology.local:8080/config';
+
   // Piper status — check on load
   checkPiperStatus(cfg.tts?.piper_url);
 }
@@ -1326,6 +1343,9 @@ async function saveConfig() {
     device: {
       welcome_text: document.getElementById('welcomeText').value || 'Welcome to Quiz Master',
       idle_timeout_seconds: parseInt(document.getElementById('idleTimeout').value) || 300
+    },
+    miscellaneous: {
+      app_url: document.getElementById('appUrl').value || 'http://synology.local:8080/config'
     },
     pricing: collectPricing()
   };
@@ -1737,7 +1757,7 @@ async function generateEasterEgg() {
 // ─── AUTO-SAVE BINDINGS ───
 function bindAutoSave() {
   // Text inputs: debounced save on input
-  ['llmModel', 'llmBaseUrl', 'llmApiKeyEnv', 'systemPrompt', 'piperUrl', 'welcomeText', 'easterEggQuestion', 'easterEggAnswer'].forEach(id => {
+  ['llmModel', 'llmBaseUrl', 'llmApiKeyEnv', 'systemPrompt', 'piperUrl', 'welcomeText', 'appUrl', 'easterEggQuestion', 'easterEggAnswer'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', autoSave);
   });

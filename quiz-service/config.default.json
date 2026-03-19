@@ -27,5 +27,8 @@
   "device": {
     "idle_timeout_seconds": 300,
     "welcome_text": "Welcome to Quiz Master"
+  },
+  "miscellaneous": {
+    "app_url": "http://synology.local:8080/config"
   }
 }

@@ -271,7 +271,7 @@ The dashboard is a single-page technical interface with the following panels:
 
 **Latency Metrics** — Table showing measured performance for every stage of the pipeline: LLM API call, Piper TTS synthesis, total end-to-end generation, and Quiz API response time to the device. Each row shows last, average, min, max, and P95 values over a rolling window. Also shows the current LLM provider/model and Piper connection status. This is the primary tool for identifying bottlenecks — if LLM latency is high, consider a faster model; if Quiz API response is high, the pool may be draining faster than it fills.
 
-**Quiz Player** — Mirrors the device UX using the same `/api/quiz` and `/audio/*` endpoints. Three buttons match the touchscreen UI: Get Question, Reveal Answer, and a category dropdown. Shows the current difficulty level. Audio plays through the browser using `<audio>` elements pointed at the audio URLs. Shows the raw JSON response in a collapsible block for debugging.
+**Quiz Player** — Similar to the device UX using the same `/api/quiz` and `/audio/*` endpoints. Three buttons: Get Question, Reveal Answer, and a category dropdown. Shows the current difficulty level. Audio plays through the browser using `<audio>` elements pointed at the audio URLs. Shows the raw JSON response in a collapsible block for debugging.
 
 **Question Queue** — Table showing every item in the pre-generated pool. Each row shows ID, category, difficulty, truncated question text, status (ready/generating/error), and generation time. Click a row to expand the full question and answer text with inline audio players and per-stage timing breakdown (LLM ms, Piper question ms, Piper answer ms).
 
@@ -441,11 +441,9 @@ API keys are **never stored in `config.json`**. The config stores only the name 
 
 ### Display Behaviour
 
-- On startup: show splash screen or "Loading..." status
 - After question received: display question text (word-wrapped), category in header
 - After "Reveal Answer" touch: show answer text
 - After "Category" touch: cycle category, display new category name, request next question
-- Before deep sleep: show last answer or "Tap to play"
 - On error: show brief error message (e.g. "No WiFi — retrying...", "Service unavailable")
 
 ## Components

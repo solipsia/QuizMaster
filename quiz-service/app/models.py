@@ -167,11 +167,16 @@ class DeviceConfig(BaseModel):
     welcome_text: str = "Welcome to Quiz Master"
 
 
+class MiscellaneousConfig(BaseModel):
+    app_url: str = "http://synology.local:8080/config"
+
+
 class ServiceConfig(BaseModel):
     llm: LLMConfig = LLMConfig()
     tts: TTSConfig = TTSConfig()
     pool: PoolConfig = PoolConfig()
     quiz: QuizConfig = QuizConfig()
     device: DeviceConfig = DeviceConfig()
+    miscellaneous: MiscellaneousConfig = MiscellaneousConfig()
     easter_egg: EasterEggConfig = EasterEggConfig()
     pricing: dict[str, list[float]] = {}  # model -> [input_per_mtok, output_per_mtok]

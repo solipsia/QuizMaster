@@ -18,6 +18,7 @@
 #include "driver/i2s_std.h"
 #include "esp_sleep.h"
 #include "logo_bitmap.h"
+#include "qrcode.h"
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Configuration
@@ -91,7 +92,7 @@ static const int REPLAY_X   = PAD + USE_W - REPLAY_W; // 418
 // Types
 // ═══════════════════════════════════════════════════════════════════════════
 
-enum Screen { S_SPLASH, S_MAIN, S_LOADING, S_QUESTION, S_ANSWER, S_ERROR };
+enum Screen { S_SPLASH, S_MAIN, S_LOADING, S_QUESTION, S_ANSWER, S_ERROR, S_CONFIG, S_QRCODE };
 enum Error  { E_NONE, E_WIFI, E_SERVICE, E_EMPTY };
 
 struct QuizQ {
@@ -134,6 +135,7 @@ static char     err_cat[24]  = "";       // category requested when error occurr
 static int      q_count      = 0;       // questions answered this session
 static bool     wifi_up      = false;
 static bool     prev_wifi_up = false;
+static Screen   config_return = S_MAIN;  // screen to return to from config
 
 // Current + prefetched questions
 static QuizQ    cur_q, pre_q;
@@ -154,6 +156,18 @@ static QueueHandle_t     audio_q        = NULL;
 static TaskHandle_t      audio_th       = NULL;
 static volatile bool     audio_playing  = false;
 static volatile bool     audio_stop     = false;
+
+// Volume (0–10, default 7 ≈ −3dB)
+static int volume_level = 7;
+
+// Config screen slider layout
+static const int SLD_X = 40, SLD_W = 400;
+static const int SLD_Y = 135, SLD_TH = 8, SLD_KR = 14;
+
+// Config screen — fetched from service
+static char cfg_provider[24] = "";
+static char cfg_model[48]    = "";
+static char cfg_app_url[128] = "http://synology.local:8080/config";
 
 // Audio indicator animation
 static bool     ind_vis   = false;
@@ -189,9 +203,12 @@ static void i2s_setup(uint32_t rate, uint8_t ch, uint8_t bits) {
     i2s_channel_enable(tx_handle);
 }
 
-static void atten6dB(uint8_t* b, size_t len) {
+static void apply_volume(uint8_t* b, size_t len) {
+    if (volume_level >= 10) return;   // full volume — no processing
     int16_t* s = (int16_t*)b;
-    for (size_t i = 0; i < len / 2; i++) s[i] >>= 1;
+    int v = volume_level;
+    for (size_t i = 0; i < len / 2; i++)
+        s[i] = (int16_t)((int32_t)s[i] * v / 10);
 }
 
 // Blocking read — uses readBytes (respects stream timeout) + stop check
@@ -267,7 +284,7 @@ static void stream_audio(const char* url) {
     if (audio_stop || pre == 0) { http.end(); return; }
 
     Serial.printf("[audio] pre-buffered %u/%u bytes, streaming %u total\n", pre, pre_target, dlen);
-    atten6dB(audio_pre, pre);
+    apply_volume(audio_pre, pre);
 
     // ── Phase 2: start playback ──
     digitalWrite(PIN_AMP_SD, HIGH);
@@ -287,7 +304,7 @@ static void stream_audio(const char* url) {
             size_t toRead = min((size_t)avail, min(sizeof(chunk), (size_t)remaining));
             size_t n = st->read(chunk, toRead);
             if (n > 0) {
-                atten6dB(chunk, n);
+                apply_volume(chunk, n);
                 i2s_channel_write(tx_handle, chunk, n, &wr, portMAX_DELAY);
                 remaining -= n;
             }
@@ -961,6 +978,200 @@ static void scr_error() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  CONFIG SCREEN
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Fetch provider/model from status + app_url from config
+static void fetch_config_info() {
+    cfg_provider[0] = 0;
+    cfg_model[0]    = 0;
+    if (!wifi_up) return;
+
+    // Provider + model from /api/admin/status
+    HTTPClient http;
+    http.begin(String(SERVICE_BASE) + "/api/admin/status");
+    http.setTimeout(FETCH_TIMEOUT_MS);
+    int code = http.GET();
+    if (code == HTTP_CODE_OK) {
+        String body = http.getString();
+        JsonDocument doc;
+        if (!deserializeJson(doc, body)) {
+            const char* p = doc["llm_api"]["provider"];
+            const char* m = doc["llm_api"]["model"];
+            if (p) { strncpy(cfg_provider, p, 23); cfg_provider[23] = 0; }
+            if (m) { strncpy(cfg_model, m, 47); cfg_model[47] = 0; }
+        }
+    }
+    http.end();
+
+    // App URL from /api/admin/config
+    http.begin(String(SERVICE_BASE) + "/api/admin/config");
+    http.setTimeout(FETCH_TIMEOUT_MS);
+    code = http.GET();
+    if (code == HTTP_CODE_OK) {
+        String body = http.getString();
+        JsonDocument doc;
+        if (!deserializeJson(doc, body)) {
+            const char* u = doc["miscellaneous"]["app_url"];
+            if (u && u[0]) { strncpy(cfg_app_url, u, 127); cfg_app_url[127] = 0; }
+        }
+    }
+    http.end();
+}
+
+// Flush the question queue via DELETE /api/admin/queue
+static bool flush_queue() {
+    if (!wifi_up) return false;
+    HTTPClient http;
+    http.begin(String(SERVICE_BASE) + "/api/admin/queue");
+    http.setTimeout(FETCH_TIMEOUT_MS);
+    int code = http.sendRequest("DELETE");
+    http.end();
+    return code == HTTP_CODE_OK;
+}
+
+static void draw_volume_slider() {
+    // Clear slider area
+    tft.fillRect(SLD_X - SLD_KR - 2, SLD_Y - SLD_KR - 2,
+                 SLD_W + 2 * SLD_KR + 4, 2 * SLD_KR + 4, COL_BG);
+
+    // Track background
+    tft.fillRoundRect(SLD_X, SLD_Y - SLD_TH / 2, SLD_W, SLD_TH,
+                      SLD_TH / 2, COL_BTN_BG);
+
+    // Filled portion
+    int fill_w = (SLD_W * volume_level) / 10;
+    if (fill_w > 0) {
+        tft.fillRoundRect(SLD_X, SLD_Y - SLD_TH / 2, fill_w, SLD_TH,
+                          SLD_TH / 2, COL_GOLD);
+    }
+
+    // Knob
+    int kx = SLD_X + fill_w;
+    tft.fillCircle(kx, SLD_Y, SLD_KR, COL_GOLD);
+    tft.drawCircle(kx, SLD_Y, SLD_KR, COL_PANEL);
+
+    // Percentage label below slider
+    tft.fillRect(SCR_W / 2 - 40, SLD_Y + SLD_KR + 6, 80, 24, COL_BG);
+    char val[8];
+    snprintf(val, sizeof(val), "%d%%", volume_level * 10);
+    tft.setTextFont(4);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(COL_TEXT_DIM, COL_BG);
+    tft.drawString(val, SCR_W / 2, SLD_Y + SLD_KR + 16);
+}
+
+static void draw_provider_model() {
+    tft.fillRect(0, CTN_Y, SCR_W, 30, COL_BG);
+    tft.setTextFont(2);
+    tft.setTextDatum(MC_DATUM);
+    if (cfg_provider[0]) {
+        char line[80];
+        char prov[24];
+        strncpy(prov, cfg_provider, 23); prov[23] = 0;
+        if (prov[0] >= 'a' && prov[0] <= 'z') prov[0] -= 32;
+        snprintf(line, sizeof(line), "%s  /  %s", prov, cfg_model);
+        tft.setTextColor(COL_CYAN, COL_BG);
+        tft.drawString(line, SCR_W / 2, CTN_Y + 14);
+    } else {
+        tft.setTextColor(COL_TEXT_DIM, COL_BG);
+        tft.drawString("Not connected", SCR_W / 2, CTN_Y + 14);
+    }
+}
+
+// Config screen button layout: 3 buttons in action bar
+static const int CFG_BTN_GAP = 8;
+static const int CFG_FLUSH_W = 170;
+static const int CFG_WEBAPP_W = 120;
+static const int CFG_BACK_W  = USE_W - CFG_FLUSH_W - CFG_WEBAPP_W - 2 * CFG_BTN_GAP;
+static const int CFG_WEBAPP_X = PAD + CFG_FLUSH_W + CFG_BTN_GAP;
+static const int CFG_BACK_X  = CFG_WEBAPP_X + CFG_WEBAPP_W + CFG_BTN_GAP;
+
+static void scr_config() {
+    // Header
+    tft.fillRect(0, 0, SCR_W, HDR_H, COL_PANEL);
+    tft.setFreeFont(&FreeSansBold9pt7b);
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(COL_GOLD, COL_PANEL);
+    tft.drawString("SETTINGS", PAD + 6, 10);
+    draw_wifi();
+    draw_bat();
+
+    // Content
+    clear_content();
+    clear_action();
+
+    // Fetch + show provider/model
+    fetch_config_info();
+    draw_provider_model();
+
+    // Volume label
+    tft.setFreeFont(&FreeSansBold12pt7b);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(COL_TEXT, COL_BG);
+    tft.drawString("Volume", SCR_W / 2, 90);
+
+    draw_volume_slider();
+
+    // Three buttons: FLUSH QUEUE | WEB APP | BACK
+    btn_error("FLUSH QUEUE", PAD, BTN_Y, CFG_FLUSH_W, BTN_H);
+    btn_primary("WEB APP", CFG_WEBAPP_X, BTN_Y, CFG_WEBAPP_W, BTN_H);
+    btn_secondary("BACK", CFG_BACK_X, BTN_Y, CFG_BACK_W, BTN_H);
+}
+
+// ── QR CODE SCREEN ──
+
+// Callback for esp_qrcode_generate — renders QR to TFT
+static void qr_render(esp_qrcode_handle_t qr) {
+    int sz = esp_qrcode_get_size(qr);
+    int avail = CTN_H - 10;
+    int px = avail / sz;
+    if (px < 2) px = 2;
+    int qr_sz = px * sz;
+    int ox = (SCR_W - qr_sz) / 2;
+    int oy = CTN_Y + (CTN_H - qr_sz) / 2;
+
+    // White quiet zone
+    int margin = 6;
+    tft.fillRect(ox - margin, oy - margin,
+                 qr_sz + 2 * margin, qr_sz + 2 * margin, TFT_WHITE);
+
+    // Draw modules
+    for (int y = 0; y < sz; y++)
+        for (int x = 0; x < sz; x++)
+            if (esp_qrcode_get_module(qr, x, y))
+                tft.fillRect(ox + x * px, oy + y * px, px, px, TFT_BLACK);
+}
+
+static void scr_qrcode() {
+    tft.fillScreen(COL_BG);
+
+    // Header
+    tft.fillRect(0, 0, SCR_W, HDR_H, COL_PANEL);
+    tft.setFreeFont(&FreeSansBold9pt7b);
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(COL_GOLD, COL_PANEL);
+    tft.drawString("WEB APP", PAD + 6, 10);
+
+    // Generate + render QR code via ESP-IDF API
+    esp_qrcode_config_t qr_cfg = {
+        .display_func = qr_render,
+        .max_qrcode_version = 10,
+        .qrcode_ecc_level = ESP_QRCODE_ECC_LOW,
+    };
+    esp_qrcode_generate(&qr_cfg, cfg_app_url);
+
+    // URL text in action area
+    tft.setTextFont(2);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(COL_TEXT_DIM, COL_BG);
+    tft.drawString(cfg_app_url, SCR_W / 2, ACT_Y + 10);
+
+    // Back button
+    btn_secondary("BACK", PAD, BTN_Y, USE_W, BTN_H);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  TOUCH HANDLING
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1001,10 +1212,21 @@ static void handle_touch() {
 
     // Touch zones
     bool in_cat     = (ty < HDR_H && tx < SCR_W / 3);
+    bool in_wifi    = (ty < HDR_H && tx >= 415 && tx <= 455);
     bool in_action  = (ty >= ACT_Y);
     bool in_replay  = (in_action && tx >= REPLAY_X);
     bool in_act_l   = (in_action && tx < PAD + SPLIT_W + SPLIT_GAP);
     bool in_content = (ty >= CTN_Y && ty < ACT_Y);
+
+    // WiFi icon → Config screen (from any screen with a header)
+    if (in_wifi && cur_screen != S_SPLASH && cur_screen != S_LOADING
+               && cur_screen != S_CONFIG && cur_screen != S_QRCODE) {
+        stop_audio();
+        config_return = cur_screen;
+        cur_screen = S_CONFIG;
+        scr_config();
+        return;
+    }
 
     switch (cur_screen) {
 
@@ -1083,6 +1305,58 @@ static void handle_touch() {
             } else {
                 do_fetch_and_show();
             }
+        }
+        break;
+
+    case S_CONFIG:
+        if (in_action && tx >= CFG_BACK_X) {
+            // BACK → previous screen
+            cur_screen = config_return;
+            switch (config_return) {
+                case S_QUESTION: scr_question(); break;
+                case S_ANSWER:   scr_answer();   break;
+                case S_ERROR:    scr_error();     break;
+                default:         scr_main();      break;
+            }
+        } else if (in_action && tx >= CFG_WEBAPP_X && tx < CFG_WEBAPP_X + CFG_WEBAPP_W) {
+            // WEB APP → show QR code
+            cur_screen = S_QRCODE;
+            scr_qrcode();
+        } else if (in_action && tx < PAD + CFG_FLUSH_W) {
+            // FLUSH QUEUE
+            if (flush_queue()) {
+                tft.fillRoundRect(PAD, BTN_Y, CFG_FLUSH_W, BTN_H, 6, COL_GREEN);
+                tft.setTextColor(COL_BG, COL_GREEN);
+                tft.setTextDatum(MC_DATUM);
+                tft.setFreeFont(&FreeSansBold12pt7b);
+                tft.drawString("FLUSHED", PAD + CFG_FLUSH_W / 2, BTN_Y + BTN_H / 2);
+                delay(600);
+                btn_error("FLUSH QUEUE", PAD, BTN_Y, CFG_FLUSH_W, BTN_H);
+            } else {
+                tft.fillRoundRect(PAD, BTN_Y, CFG_FLUSH_W, BTN_H, 6, COL_RED);
+                tft.setTextColor(COL_TEXT, COL_RED);
+                tft.setTextDatum(MC_DATUM);
+                tft.setFreeFont(&FreeSansBold12pt7b);
+                tft.drawString("FAILED", PAD + CFG_FLUSH_W / 2, BTN_Y + BTN_H / 2);
+                delay(600);
+                btn_error("FLUSH QUEUE", PAD, BTN_Y, CFG_FLUSH_W, BTN_H);
+            }
+        } else if (ty >= SLD_Y - SLD_KR - 10 && ty <= SLD_Y + SLD_KR + 10
+                   && tx >= SLD_X - SLD_KR && tx <= SLD_X + SLD_W + SLD_KR) {
+            // Volume slider tap
+            int new_vol = constrain((int)(tx - SLD_X) * 10 / SLD_W, 0, 10);
+            if (new_vol != volume_level) {
+                volume_level = new_vol;
+                draw_volume_slider();
+            }
+        }
+        break;
+
+    case S_QRCODE:
+        if (in_action) {
+            // BACK → config screen
+            cur_screen = S_CONFIG;
+            scr_config();
         }
         break;
 

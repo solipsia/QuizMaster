@@ -294,12 +294,13 @@
   <text x="1195" y="350" text-anchor="middle" fill="#cc0000" font-size="8">No tristate!</text>
 
   <!-- ==================== SIGNAL WIRES ==================== -->
+  <!-- TFT wire colours match physical ribbon: pin14→1 = blk brn red org yel grn blu pur gry wht blk brn red org -->
 
-  <!-- === POWER: 3.3V → Display VCC (pin 1) + LED (pin 8) === -->
-  <path d="M 738 460 L 1010 460 L 1010 148 L 1045 148" fill="none" stroke="#cc2222" stroke-width="1.5"/>
-  <circle cx="1010" cy="316" r="3" fill="#cc2222"/>
-  <path d="M 1010 316 L 1045 316" fill="none" stroke="#cc2222" stroke-width="1.5"/>
-  <text x="1022" y="236" fill="#cc2222" font-size="8">3.3V</text>
+  <!-- === POWER: 3.3V → Display VCC pin 1 (orange wire) + LED pin 8 (blue wire) === -->
+  <path d="M 738 460 L 1010 460 L 1010 148 L 1045 148" fill="none" stroke="#FF6600" stroke-width="1.5"/>
+  <circle cx="1010" cy="316" r="3" fill="#333"/>
+  <path d="M 1010 316 L 1045 316" fill="none" stroke="#2563EB" stroke-width="1.5"/>
+  <text x="1022" y="236" fill="#666" font-size="8">3.3V</text>
 
   <!-- === POWER: 5V rail → Amp VIN === -->
   <circle cx="462" cy="585" r="3" fill="#cc2222"/>
@@ -309,8 +310,8 @@
   <!-- === GND: ESP32 left → Amp GND === -->
   <path d="M 462 436 L 380 436 L 380 246 L 295 246" fill="none" stroke="#555" stroke-width="1.5"/>
 
-  <!-- === GND: ESP32 right → Display GND === -->
-  <path d="M 738 436 L 1000 436 L 1000 172 L 1045 172" fill="none" stroke="#555" stroke-width="1.5"/>
+  <!-- === GND: ESP32 right → Display GND pin 2 (red wire) === -->
+  <path d="M 738 436 L 1000 436 L 1000 172 L 1045 172" fill="none" stroke="#CC0000" stroke-width="1.5"/>
 
   <!-- === GND: Branch down to power supply === -->
   <path d="M 380 436 L 380 669" fill="none" stroke="#555" stroke-width="1.5"/>
@@ -332,41 +333,41 @@
   <path d="M 462 244 L 360 244 L 360 270 L 295 270" fill="none" stroke="#7b2d8e" stroke-width="1.5"/>
   <text x="345" y="265" text-anchor="middle" fill="#7b2d8e" font-size="8">SD</text>
 
-  <!-- === SPI MOSI: GPIO23 → SDI pin 6 + T_DIN pin 12 (x=988) === -->
-  <path d="M 738 124 L 988 124 L 988 268 L 1045 268" fill="none" stroke="#2563eb" stroke-width="1.5"/>
-  <circle cx="988" cy="268" r="3" fill="#2563eb"/>
-  <path d="M 988 268 L 988 424 L 1045 424" fill="none" stroke="#2563eb" stroke-width="1.5"/>
-  <text x="998" y="350" text-anchor="start" fill="#2563eb" font-size="8">MOSI</text>
+  <!-- === SPI MOSI: GPIO23 → SDI pin 6 (grey wire) + T_DIN pin 12 (red wire) === -->
+  <path d="M 738 124 L 988 124 L 988 268 L 1045 268" fill="none" stroke="#888888" stroke-width="1.5"/>
+  <circle cx="988" cy="268" r="3" fill="#333"/>
+  <path d="M 988 268 L 988 424 L 1045 424" fill="none" stroke="#CC0000" stroke-width="1.5"/>
+  <text x="998" y="350" text-anchor="start" fill="#666" font-size="8">MOSI</text>
 
-  <!-- === SPI SCK: GPIO18 → SCK pin 7 + T_CLK pin 10 (x=968) === -->
-  <path d="M 738 268 L 968 268 L 968 292 L 1045 292" fill="none" stroke="#2563eb" stroke-width="1.5"/>
-  <circle cx="968" cy="292" r="3" fill="#2563eb"/>
-  <path d="M 968 292 L 968 376 L 1045 376" fill="none" stroke="#2563eb" stroke-width="1.5"/>
-  <text x="978" y="338" text-anchor="start" fill="#2563eb" font-size="8">SCK</text>
+  <!-- === SPI SCK: GPIO18 → SCK pin 7 (purple wire) + T_CLK pin 10 (yellow wire) === -->
+  <path d="M 738 268 L 968 268 L 968 292 L 1045 292" fill="none" stroke="#7B2D8E" stroke-width="1.5"/>
+  <circle cx="968" cy="292" r="3" fill="#333"/>
+  <path d="M 968 292 L 968 376 L 1045 376" fill="none" stroke="#CCAA00" stroke-width="1.5"/>
+  <text x="978" y="338" text-anchor="start" fill="#666" font-size="8">SCK</text>
 
-  <!-- === Touch MISO: GPIO19 → T_DO pin 13 (x=945) === -->
-  <path d="M 738 244 L 945 244 L 945 448 L 1045 448" fill="none" stroke="#9a6d1f" stroke-width="1.5"/>
-  <text x="955" y="400" text-anchor="start" fill="#9a6d1f" font-size="8">MISO</text>
+  <!-- === Touch MISO: GPIO19 → T_DO pin 13 (brown wire) === -->
+  <path d="M 738 244 L 945 244 L 945 448 L 1045 448" fill="none" stroke="#8B4513" stroke-width="1.5"/>
+  <text x="955" y="400" text-anchor="start" fill="#8B4513" font-size="8">MISO</text>
 
-  <!-- === Display CS: GPIO15 → CS pin 3 (x=920) === -->
-  <path d="M 738 412 L 920 412 L 920 196 L 1045 196" fill="none" stroke="#16813a" stroke-width="1.5"/>
-  <text x="908" y="302" text-anchor="end" fill="#16813a" font-size="8">CS</text>
+  <!-- === Display CS: GPIO15 → CS pin 3 (brown wire) === -->
+  <path d="M 738 412 L 920 412 L 920 196 L 1045 196" fill="none" stroke="#8B4513" stroke-width="1.5"/>
+  <text x="908" y="302" text-anchor="end" fill="#8B4513" font-size="8">CS</text>
 
-  <!-- === Display DC: GPIO2 → DC pin 5 (x=895) === -->
-  <path d="M 738 388 L 895 388 L 895 244 L 1045 244" fill="none" stroke="#16813a" stroke-width="1.5"/>
-  <text x="883" y="314" text-anchor="end" fill="#16813a" font-size="8">DC</text>
+  <!-- === Display DC: GPIO2 → DC pin 5 (white wire — shown dashed) === -->
+  <path d="M 738 388 L 895 388 L 895 244 L 1045 244" fill="none" stroke="#AAAAAA" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="883" y="314" text-anchor="end" fill="#999" font-size="8">DC (wht)</text>
 
-  <!-- === Display RST: GPIO16 → RESET pin 4 (x=870) === -->
-  <path d="M 738 340 L 870 340 L 870 220 L 1045 220" fill="none" stroke="#16813a" stroke-width="1.5"/>
-  <text x="858" y="280" text-anchor="end" fill="#16813a" font-size="8">RST</text>
+  <!-- === Display RST: GPIO16 → RESET pin 4 (black wire) === -->
+  <path d="M 738 340 L 870 340 L 870 220 L 1045 220" fill="none" stroke="#222222" stroke-width="1.5"/>
+  <text x="858" y="280" text-anchor="end" fill="#222222" font-size="8">RST</text>
 
-  <!-- === Touch T_CS: GPIO21 → T_CS pin 11 (x=845) === -->
-  <path d="M 738 220 L 845 220 L 845 400 L 1045 400" fill="none" stroke="#9a6d1f" stroke-width="1.5"/>
-  <text x="833" y="316" text-anchor="end" fill="#9a6d1f" font-size="8">T_CS</text>
+  <!-- === Touch T_CS: GPIO21 → T_CS pin 11 (orange wire) === -->
+  <path d="M 738 220 L 845 220 L 845 400 L 1045 400" fill="none" stroke="#FF6600" stroke-width="1.5"/>
+  <text x="833" y="316" text-anchor="end" fill="#FF6600" font-size="8">T_CS</text>
 
-  <!-- === Touch T_IRQ: GPIO4 → T_IRQ pin 14 (x=820) === -->
-  <path d="M 738 364 L 820 364 L 820 472 L 1045 472" fill="none" stroke="#9a6d1f" stroke-width="1.5"/>
-  <text x="808" y="422" text-anchor="end" fill="#9a6d1f" font-size="8">T_IRQ</text>
+  <!-- === Touch T_IRQ: GPIO4 → T_IRQ pin 14 (black wire) === -->
+  <path d="M 738 364 L 820 364 L 820 472 L 1045 472" fill="none" stroke="#222222" stroke-width="1.5"/>
+  <text x="808" y="422" text-anchor="end" fill="#222222" font-size="8">T_IRQ</text>
 
   <!-- ==================== POWER SUPPLY SECTION ==================== -->
 
@@ -473,24 +474,25 @@
   <!-- ==================== CONNECTIONS TABLE ==================== -->
   <text x="700" y="868" text-anchor="middle" fill="#222" font-size="14" font-weight="bold">Connections Reference</text>
 
-  <!-- Table structure: columns at x = 30, 168, 236, 316, 484, 544, 622, 700, 760, 820 -->
-  <!-- Column widths: Net=138, ESP32=68, Amp=80, Display=168, Spkr=60, TP4056=78, MT3608=78, Switch=60, Batt=60, Other=140 -->
-  <!-- Table right edge at x=960. Header at y=880, data rows 16px each -->
+  <!-- Table structure: columns at x = 30, 168, 236, 316, 484, 544, 604, 682, 760, 820, 880 -->
+  <!-- Column widths: Net=138, ESP32=68, Amp=80, Display=168, Wire=60, Spkr=60, TP4056=78, MT3608=78, Switch=60, Batt=60, Other=140 -->
+  <!-- Table right edge at x=1020. Header at y=880, data rows 16px each -->
 
   <!-- Header background -->
-  <rect x="30" y="880" width="930" height="18" fill="#e8e8e8" rx="2"/>
+  <rect x="30" y="880" width="990" height="18" fill="#e8e8e8" rx="2"/>
 
   <!-- Header text -->
   <text x="99" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">Net</text>
   <text x="202" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">ESP32</text>
   <text x="276" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">Amp</text>
   <text x="400" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">Display / Touch</text>
-  <text x="514" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">Speaker</text>
-  <text x="583" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">TP4056</text>
-  <text x="661" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">MT3608</text>
-  <text x="730" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">Switch</text>
-  <text x="790" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">Battery</text>
-  <text x="890" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">Other</text>
+  <text x="514" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">Wire</text>
+  <text x="574" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">Speaker</text>
+  <text x="643" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">TP4056</text>
+  <text x="721" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">MT3608</text>
+  <text x="790" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">Switch</text>
+  <text x="850" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">Battery</text>
+  <text x="950" y="893" text-anchor="middle" fill="#222" font-size="9" font-weight="bold">Other</text>
 
   <!-- Column lines -->
   <line x1="168" y1="880" x2="168" y2="1244" stroke="#ccc" stroke-width="0.5"/>
@@ -498,34 +500,35 @@
   <line x1="316" y1="880" x2="316" y2="1244" stroke="#ccc" stroke-width="0.5"/>
   <line x1="484" y1="880" x2="484" y2="1244" stroke="#ccc" stroke-width="0.5"/>
   <line x1="544" y1="880" x2="544" y2="1244" stroke="#ccc" stroke-width="0.5"/>
-  <line x1="622" y1="880" x2="622" y2="1244" stroke="#ccc" stroke-width="0.5"/>
-  <line x1="700" y1="880" x2="700" y2="1244" stroke="#ccc" stroke-width="0.5"/>
+  <line x1="604" y1="880" x2="604" y2="1244" stroke="#ccc" stroke-width="0.5"/>
+  <line x1="682" y1="880" x2="682" y2="1244" stroke="#ccc" stroke-width="0.5"/>
   <line x1="760" y1="880" x2="760" y2="1244" stroke="#ccc" stroke-width="0.5"/>
   <line x1="820" y1="880" x2="820" y2="1244" stroke="#ccc" stroke-width="0.5"/>
+  <line x1="880" y1="880" x2="880" y2="1244" stroke="#ccc" stroke-width="0.5"/>
 
   <!-- Table border -->
-  <rect x="30" y="880" width="930" height="364" fill="none" stroke="#999" stroke-width="1" rx="2"/>
+  <rect x="30" y="880" width="990" height="364" fill="none" stroke="#999" stroke-width="1" rx="2"/>
   <!-- Header bottom line -->
-  <line x1="30" y1="898" x2="960" y2="898" stroke="#999" stroke-width="1"/>
+  <line x1="30" y1="898" x2="1020" y2="898" stroke="#999" stroke-width="1"/>
 
   <!-- Alternating row backgrounds (every other row light grey) -->
-  <rect x="30" y="914" width="930" height="16" fill="#f8f8f8"/>
-  <rect x="30" y="946" width="930" height="16" fill="#f8f8f8"/>
-  <rect x="30" y="978" width="930" height="16" fill="#f8f8f8"/>
-  <rect x="30" y="1010" width="930" height="16" fill="#f8f8f8"/>
-  <rect x="30" y="1042" width="930" height="16" fill="#f8f8f8"/>
-  <rect x="30" y="1074" width="930" height="16" fill="#f8f8f8"/>
-  <rect x="30" y="1106" width="930" height="16" fill="#f8f8f8"/>
-  <rect x="30" y="1138" width="930" height="16" fill="#f8f8f8"/>
-  <rect x="30" y="1170" width="930" height="16" fill="#f8f8f8"/>
-  <rect x="30" y="1202" width="930" height="16" fill="#f8f8f8"/>
+  <rect x="30" y="914" width="990" height="16" fill="#f8f8f8"/>
+  <rect x="30" y="946" width="990" height="16" fill="#f8f8f8"/>
+  <rect x="30" y="978" width="990" height="16" fill="#f8f8f8"/>
+  <rect x="30" y="1010" width="990" height="16" fill="#f8f8f8"/>
+  <rect x="30" y="1042" width="990" height="16" fill="#f8f8f8"/>
+  <rect x="30" y="1074" width="990" height="16" fill="#f8f8f8"/>
+  <rect x="30" y="1106" width="990" height="16" fill="#f8f8f8"/>
+  <rect x="30" y="1138" width="990" height="16" fill="#f8f8f8"/>
+  <rect x="30" y="1170" width="990" height="16" fill="#f8f8f8"/>
+  <rect x="30" y="1202" width="990" height="16" fill="#f8f8f8"/>
 
   <!-- Section separators (thicker lines between groups) -->
-  <line x1="30" y1="962" x2="960" y2="962" stroke="#bbb" stroke-width="1"/>
-  <line x1="30" y1="1010" x2="960" y2="1010" stroke="#bbb" stroke-width="1"/>
-  <line x1="30" y1="1106" x2="960" y2="1106" stroke="#bbb" stroke-width="1"/>
-  <line x1="30" y1="1154" x2="960" y2="1154" stroke="#bbb" stroke-width="1"/>
-  <line x1="30" y1="1218" x2="960" y2="1218" stroke="#bbb" stroke-width="1"/>
+  <line x1="30" y1="962" x2="1020" y2="962" stroke="#bbb" stroke-width="1"/>
+  <line x1="30" y1="1010" x2="1020" y2="1010" stroke="#bbb" stroke-width="1"/>
+  <line x1="30" y1="1106" x2="1020" y2="1106" stroke="#bbb" stroke-width="1"/>
+  <line x1="30" y1="1154" x2="1020" y2="1154" stroke="#bbb" stroke-width="1"/>
+  <line x1="30" y1="1218" x2="1020" y2="1218" stroke="#bbb" stroke-width="1"/>
 
   <!-- Row 1: I2S BCLK (y baseline = 911) -->
   <text x="35" y="911" fill="#7b2d8e" font-size="9" font-weight="bold">I2S BCLK</text>
@@ -547,101 +550,114 @@
   <text x="173" y="959" fill="#333" font-size="9">D32</text>
   <text x="241" y="959" fill="#333" font-size="9">SD</text>
 
-  <!-- Row 5: SPI MOSI (y=975) -->
+  <!-- Row 5: SPI MOSI (y=975) — grey wire (pin 6) + red wire (pin 12) -->
   <text x="35" y="975" fill="#2563eb" font-size="9" font-weight="bold">SPI MOSI</text>
   <text x="173" y="975" fill="#333" font-size="9">D23</text>
   <text x="321" y="975" fill="#333" font-size="9">6 SDI + 12 T_DIN</text>
+  <rect x="489" y="966" width="10" height="10" fill="#888888" stroke="#666" stroke-width="0.5" rx="1"/>
+  <rect x="503" y="966" width="10" height="10" fill="#CC0000" stroke="#666" stroke-width="0.5" rx="1"/>
 
-  <!-- Row 6: SPI SCK (y=991) -->
+  <!-- Row 6: SPI SCK (y=991) — purple wire (pin 7) + yellow wire (pin 10) -->
   <text x="35" y="991" fill="#2563eb" font-size="9" font-weight="bold">SPI SCK</text>
   <text x="173" y="991" fill="#333" font-size="9">D18</text>
   <text x="321" y="991" fill="#333" font-size="9">7 SCK + 10 T_CLK</text>
+  <rect x="489" y="982" width="10" height="10" fill="#7B2D8E" stroke="#666" stroke-width="0.5" rx="1"/>
+  <rect x="503" y="982" width="10" height="10" fill="#CCAA00" stroke="#666" stroke-width="0.5" rx="1"/>
 
-  <!-- Row 7: SPI MISO (y=1007) -->
+  <!-- Row 7: SPI MISO (y=1007) — brown wire (pin 13) -->
   <text x="35" y="1007" fill="#9a6d1f" font-size="9" font-weight="bold">SPI MISO</text>
   <text x="173" y="1007" fill="#333" font-size="9">D19</text>
   <text x="321" y="1007" fill="#333" font-size="9">13 T_DO</text>
+  <rect x="489" y="998" width="10" height="10" fill="#8B4513" stroke="#666" stroke-width="0.5" rx="1"/>
 
-  <!-- Row 8: LCD CS (y=1023) -->
+  <!-- Row 8: LCD CS (y=1023) — brown wire (pin 3) -->
   <text x="35" y="1023" fill="#16813a" font-size="9" font-weight="bold">LCD CS</text>
   <text x="173" y="1023" fill="#333" font-size="9">D15</text>
   <text x="321" y="1023" fill="#333" font-size="9">3 CS</text>
+  <rect x="489" y="1014" width="10" height="10" fill="#8B4513" stroke="#666" stroke-width="0.5" rx="1"/>
 
-  <!-- Row 9: LCD DC (y=1039) -->
+  <!-- Row 9: LCD DC (y=1039) — white wire (pin 5) -->
   <text x="35" y="1039" fill="#16813a" font-size="9" font-weight="bold">LCD DC</text>
   <text x="173" y="1039" fill="#333" font-size="9">D2</text>
   <text x="321" y="1039" fill="#333" font-size="9">5 DC/RS</text>
+  <rect x="489" y="1030" width="10" height="10" fill="#ffffff" stroke="#999" stroke-width="1" rx="1"/>
 
-  <!-- Row 10: LCD RST (y=1055) -->
+  <!-- Row 10: LCD RST (y=1055) — black wire (pin 4) -->
   <text x="35" y="1055" fill="#16813a" font-size="9" font-weight="bold">LCD RST</text>
   <text x="173" y="1055" fill="#333" font-size="9">D16</text>
   <text x="321" y="1055" fill="#333" font-size="9">4 RESET</text>
+  <rect x="489" y="1046" width="10" height="10" fill="#222222" stroke="#666" stroke-width="0.5" rx="1"/>
 
-  <!-- Row 11: Touch CS (y=1071) -->
+  <!-- Row 11: Touch CS (y=1071) — orange wire (pin 11) -->
   <text x="35" y="1071" fill="#9a6d1f" font-size="9" font-weight="bold">Touch CS</text>
   <text x="173" y="1071" fill="#333" font-size="9">D21</text>
   <text x="321" y="1071" fill="#333" font-size="9">11 T_CS</text>
+  <rect x="489" y="1062" width="10" height="10" fill="#FF6600" stroke="#666" stroke-width="0.5" rx="1"/>
 
-  <!-- Row 12: Touch IRQ (y=1087) -->
+  <!-- Row 12: Touch IRQ (y=1087) — black wire (pin 14) -->
   <text x="35" y="1087" fill="#9a6d1f" font-size="9" font-weight="bold">Touch IRQ</text>
   <text x="173" y="1087" fill="#333" font-size="9">D4</text>
   <text x="321" y="1087" fill="#333" font-size="9">14 T_IRQ</text>
+  <rect x="489" y="1078" width="10" height="10" fill="#222222" stroke="#666" stroke-width="0.5" rx="1"/>
 
   <!-- Row 13: VBAT ADC (y=1103) -->
   <text x="35" y="1103" fill="#c06000" font-size="9" font-weight="bold">VBAT ADC</text>
   <text x="173" y="1103" fill="#333" font-size="9">D35</text>
-  <text x="825" y="1103" fill="#333" font-size="9">R1∩R2 mid</text>
+  <text x="885" y="1103" fill="#333" font-size="9">R1∩R2 mid</text>
 
   <!-- Row 14: 5V rail (y=1119) -->
   <text x="35" y="1119" fill="#cc2222" font-size="9" font-weight="bold">5V rail</text>
   <text x="173" y="1119" fill="#333" font-size="9">VIN</text>
   <text x="241" y="1119" fill="#333" font-size="9">VIN</text>
-  <text x="705" y="1119" fill="#333" font-size="9">OUT</text>
+  <text x="765" y="1119" fill="#333" font-size="9">OUT</text>
 
-  <!-- Row 15: 3.3V (y=1135) -->
+  <!-- Row 15: 3.3V (y=1135) — orange wire (pin 1) + blue wire (pin 8) -->
   <text x="35" y="1135" fill="#cc2222" font-size="9" font-weight="bold">3.3V</text>
   <text x="173" y="1135" fill="#333" font-size="9">3V3</text>
   <text x="321" y="1135" fill="#333" font-size="9">1 VCC + 8 LED</text>
+  <rect x="489" y="1126" width="10" height="10" fill="#FF6600" stroke="#666" stroke-width="0.5" rx="1"/>
+  <rect x="503" y="1126" width="10" height="10" fill="#2563EB" stroke="#666" stroke-width="0.5" rx="1"/>
 
-  <!-- Row 16: GND (y=1151) -->
+  <!-- Row 16: GND (y=1151) — red wire (pin 2) -->
   <text x="35" y="1151" fill="#555" font-size="9" font-weight="bold">GND</text>
   <text x="173" y="1151" fill="#333" font-size="9">GND ×2</text>
   <text x="241" y="1151" fill="#333" font-size="9">GND</text>
   <text x="321" y="1151" fill="#333" font-size="9">2</text>
-  <text x="549" y="1151" fill="#333" font-size="9">OUT−</text>
-  <text x="627" y="1151" fill="#333" font-size="9">GND ×2</text>
-  <text x="825" y="1151" fill="#333" font-size="9">Cap−, R2↓</text>
+  <rect x="489" y="1142" width="10" height="10" fill="#CC0000" stroke="#666" stroke-width="0.5" rx="1"/>
+  <text x="609" y="1151" fill="#333" font-size="9">OUT−</text>
+  <text x="687" y="1151" fill="#333" font-size="9">GND ×2</text>
+  <text x="885" y="1151" fill="#333" font-size="9">Cap−, R2↓</text>
 
   <!-- Row 17: Charger out (y=1167) -->
   <text x="35" y="1167" fill="#c06000" font-size="9" font-weight="bold">Charger out</text>
-  <text x="549" y="1167" fill="#333" font-size="9">OUT+</text>
-  <text x="627" y="1167" fill="#333" font-size="9">IN+</text>
+  <text x="609" y="1167" fill="#333" font-size="9">OUT+</text>
+  <text x="687" y="1167" fill="#333" font-size="9">IN+</text>
 
   <!-- Row 18: Boost 5V (y=1183) -->
   <text x="35" y="1183" fill="#c06000" font-size="9" font-weight="bold">Boost 5V</text>
-  <text x="627" y="1183" fill="#333" font-size="9">VOUT</text>
-  <text x="705" y="1183" fill="#333" font-size="9">IN</text>
-  <text x="825" y="1183" fill="#333" font-size="9">Cap+</text>
+  <text x="687" y="1183" fill="#333" font-size="9">VOUT</text>
+  <text x="765" y="1183" fill="#333" font-size="9">IN</text>
+  <text x="885" y="1183" fill="#333" font-size="9">Cap+</text>
 
   <!-- Row 19: Battery + (y=1199) -->
   <text x="35" y="1199" fill="#b87300" font-size="9" font-weight="bold">Battery +</text>
-  <text x="549" y="1199" fill="#333" font-size="9">B+</text>
-  <text x="765" y="1199" fill="#333" font-size="9">+</text>
-  <text x="825" y="1199" fill="#333" font-size="9">R1 top</text>
+  <text x="609" y="1199" fill="#333" font-size="9">B+</text>
+  <text x="825" y="1199" fill="#333" font-size="9">+</text>
+  <text x="885" y="1199" fill="#333" font-size="9">R1 top</text>
 
   <!-- Row 20: Battery − (y=1215) -->
   <text x="35" y="1215" fill="#555" font-size="9" font-weight="bold">Battery −</text>
-  <text x="549" y="1215" fill="#333" font-size="9">B−</text>
-  <text x="765" y="1215" fill="#333" font-size="9">−</text>
+  <text x="609" y="1215" fill="#333" font-size="9">B−</text>
+  <text x="825" y="1215" fill="#333" font-size="9">−</text>
 
   <!-- Row 21: Speaker + (y=1231) -->
   <text x="35" y="1231" fill="#b87300" font-size="9" font-weight="bold">Speaker +</text>
   <text x="241" y="1231" fill="#333" font-size="9">SPK+</text>
-  <text x="489" y="1231" fill="#333" font-size="9">+</text>
+  <text x="549" y="1231" fill="#333" font-size="9">+</text>
 
   <!-- Row 22: Speaker − (y=1247) -->
   <text x="35" y="1247" fill="#b87300" font-size="9" font-weight="bold">Speaker −</text>
   <text x="241" y="1247" fill="#333" font-size="9">SPK−</text>
-  <text x="489" y="1247" fill="#333" font-size="9">−</text>
+  <text x="549" y="1247" fill="#333" font-size="9">−</text>
 
 </svg>
