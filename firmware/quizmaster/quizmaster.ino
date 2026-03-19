@@ -112,24 +112,11 @@ static char  cat_names[MAX_CATS][24];
 static bool  cat_enabled[MAX_CATS];
 static int   num_cats = 0;
 
-// Pick a random enabled category name. Returns NULL if none enabled.
-static const char* pick_category() {
-    int enabled_count = 0;
-    for (int i = 0; i < num_cats; i++) {
-        if (cat_enabled[i]) enabled_count++;
-    }
-    if (enabled_count == 0) return NULL;
-    if (enabled_count == num_cats) return "all";  // all enabled → no filter
-
-    int pick = random(0, enabled_count);
-    int j = 0;
-    for (int i = 0; i < num_cats; i++) {
-        if (cat_enabled[i]) {
-            if (j == pick) return cat_names[i];
-            j++;
-        }
-    }
-    return "all";
+// Count enabled categories
+static int count_enabled_cats() {
+    int n = 0;
+    for (int i = 0; i < num_cats; i++) if (cat_enabled[i]) n++;
+    return n;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -142,6 +129,8 @@ static uint16_t calData[5] = { 300, 3600, 300, 3600, 3 };
 // Screen / UI state
 static Screen   cur_screen   = S_SPLASH;
 static Error    cur_error    = E_NONE;
+static int      err_http     = 0;        // HTTP code from last failed fetch
+static char     err_cat[24]  = "";       // category requested when error occurred
 static int      q_count      = 0;       // questions answered this session
 static bool     wifi_up      = false;
 static bool     prev_wifi_up = false;
@@ -411,17 +400,63 @@ static void fetch_categories() {
     Serial.printf("Categories: %d loaded\n", num_cats);
 }
 
-// Fetch a question. On failure, *err is set (if non-null). Returns .valid = false on error.
-static QuizQ fetch_question(const char* category, Error* err = nullptr) {
+// URL-encode a string (spaces, special chars) into dst. Returns dst.
+static char* url_encode(const char* src, char* dst, int maxlen) {
+    int j = 0;
+    for (int i = 0; src[i] && j < maxlen - 3; i++) {
+        char c = src[i];
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
+            dst[j++] = c;
+        } else {
+            j += snprintf(dst + j, maxlen - j, "%%%02X", (unsigned char)c);
+        }
+    }
+    dst[j] = 0;
+    return dst;
+}
+
+// Fetch a question using the currently enabled categories as filter.
+// Sends comma-separated list so the pool can match any of them.
+static QuizQ fetch_question(Error* err = nullptr) {
     QuizQ q;
     String url = String(SERVICE_BASE) + "/api/quiz";
-    if (category && strcmp(category, "all") != 0)
-        url += "?category=" + String(category);
+
+    int enabled = count_enabled_cats();
+
+    if (enabled > 0 && enabled < num_cats) {
+        // Subset — send comma-separated list
+        url += "?category=";
+        bool first = true;
+        for (int i = 0; i < num_cats; i++) {
+            if (cat_enabled[i]) {
+                if (!first) url += ",";
+                char enc[72];
+                url_encode(cat_names[i], enc, sizeof(enc));
+                url += enc;
+                first = false;
+            }
+        }
+    }
+    // else: all enabled (or none) → no filter
+
+    // Store info for error display
+    if (enabled == 0 || enabled == num_cats) {
+        strcpy(err_cat, "all");
+    } else if (enabled == 1) {
+        for (int i = 0; i < num_cats; i++) {
+            if (cat_enabled[i]) { strncpy(err_cat, cat_names[i], 23); err_cat[23] = 0; break; }
+        }
+    } else {
+        snprintf(err_cat, sizeof(err_cat), "%d of %d cats", enabled, num_cats);
+    }
 
     HTTPClient http;
     http.begin(url);
     http.setTimeout(FETCH_TIMEOUT_MS);
     int code = http.GET();
+    err_http = code;
+    Serial.printf("[quiz] GET %s -> %d\n", url.c_str(), code);
 
     if (code == HTTP_CODE_OK) {
         JsonDocument doc;
@@ -888,7 +923,20 @@ static void scr_error() {
     tft.drawString(d1, SCR_W / 2, CTN_Y + 95);
     tft.drawString(d2, SCR_W / 2, CTN_Y + 118);
 
-    btn_error("TAP TO RETRY", PAD, BTN_Y, USE_W, BTN_H);
+    // Error detail line: HTTP code + category
+    char detail[64];
+    if (err_http != 0) {
+        snprintf(detail, sizeof(detail), "HTTP %d  |  category: %s", err_http, err_cat);
+    } else {
+        snprintf(detail, sizeof(detail), "category: %s", err_cat);
+    }
+    tft.setTextColor(COL_TEXT_DIM, COL_BG);
+    tft.drawString(detail, SCR_W / 2, CTN_Y + 150);
+
+    // Split buttons: CATEGORY + RETRY
+    btn_secondary("CATEGORY", PAD, BTN_Y, SPLIT_W, BTN_H);
+    int retry_w = USE_W - SPLIT_W - SPLIT_GAP;
+    btn_error("RETRY", SPLIT_R_X, BTN_Y, retry_w, BTN_H);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -897,8 +945,7 @@ static void scr_error() {
 
 // Attempt to fetch and show a question (handles loading + error transitions)
 static void do_fetch_and_show() {
-    const char* cat = pick_category();
-    if (!cat) return;  // no categories enabled
+    if (!any_cats_enabled()) return;
 
     cur_screen = S_LOADING;
     scr_loading();
@@ -908,7 +955,7 @@ static void do_fetch_and_show() {
     }
 
     Error err = E_NONE;
-    QuizQ q = fetch_question(cat, &err);
+    QuizQ q = fetch_question(&err);
     if (q.valid) {
         cur_q = q;
         q_count++;
@@ -999,7 +1046,12 @@ static void handle_touch() {
         break;
 
     case S_ERROR:
-        if (in_action) {
+        if (in_cat || in_act_l) {
+            // Go back to category selection
+            cur_screen = S_MAIN;
+            scr_main();
+        } else if (in_action && tx >= SPLIT_R_X) {
+            // Retry
             if (cur_error == E_WIFI) {
                 cur_screen = S_LOADING; scr_loading();
                 if (connect_wifi(WIFI_TIMEOUT_MS)) {
@@ -1165,12 +1217,9 @@ void loop() {
     // ── Prefetch during answer screen ──
     if (cur_screen == S_ANSWER && !pre_started && !pre_done) {
         pre_started = true;
-        const char* cat = pick_category();
-        if (cat) {
-            pre_q = fetch_question(cat);   // err ignored for prefetch
-            pre_done = pre_q.valid;
-            Serial.printf("Prefetch: %s\n", pre_done ? "ok" : "failed");
-        }
+        pre_q = fetch_question();   // err ignored for prefetch
+        pre_done = pre_q.valid;
+        Serial.printf("Prefetch: %s\n", pre_done ? "ok" : "failed");
     }
 
     // ── Idle timeout → deep sleep ──

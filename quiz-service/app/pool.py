@@ -15,8 +15,14 @@ class QuestionPool:
 
     async def pop(self, category: str | None = None) -> QuizQuestion | None:
         async with self._lock:
+            if category is None:
+                if self._questions:
+                    return self._questions.pop(0)
+                return None
+            # Support comma-separated category list
+            cats = set(c.strip() for c in category.split(","))
             for i, q in enumerate(self._questions):
-                if category is None or q.category == category:
+                if q.category in cats:
                     return self._questions.pop(i)
             return None
 
