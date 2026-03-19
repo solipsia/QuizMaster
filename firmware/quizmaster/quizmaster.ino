@@ -602,28 +602,49 @@ static void btn_replay(int x, int y, int w, int h) {
 }
 
 // Category badge — shows enabled count in header
-static void draw_badge(uint16_t bg) {
-    int enabled = 0;
-    for (int i = 0; i < num_cats; i++) {
-        if (cat_enabled[i]) enabled++;
+// Draw category badge in header. If cat_name is non-null, show that
+// category in bold (used on question/answer screens). Otherwise show
+// the enabled count summary.
+static void draw_badge(uint16_t bg, const char* cat_name = nullptr) {
+    char label[24];
+
+    if (cat_name) {
+        // Show specific category name — uppercase, bold
+        int i = 0;
+        while (cat_name[i] && i < 22) { label[i] = toupper(cat_name[i]); i++; }
+        label[i] = 0;
+    } else {
+        // Show enabled count summary
+        int enabled = 0;
+        for (int i = 0; i < num_cats; i++) if (cat_enabled[i]) enabled++;
+        if (enabled == num_cats)    snprintf(label, sizeof(label), "ALL");
+        else if (enabled == 0)      snprintf(label, sizeof(label), "NONE");
+        else                        snprintf(label, sizeof(label), "%d/%d", enabled, num_cats);
     }
 
-    char label[20];
-    if (enabled == num_cats)    snprintf(label, sizeof(label), "ALL");
-    else if (enabled == 0)      snprintf(label, sizeof(label), "NONE");
-    else                        snprintf(label, sizeof(label), "%d/%d", enabled, num_cats);
-
-    tft.setTextFont(2);
+    // Use bold font for category name, regular for summary
+    if (cat_name)
+        tft.setFreeFont(&FreeSansBold9pt7b);
+    else
+        tft.setTextFont(2);
     tft.setTextDatum(TL_DATUM);
+
+    // Truncate if too wide
+    while (tft.textWidth(label) > 160 && strlen(label) > 4) {
+        int l = strlen(label) - 1;
+        label[l] = 0; label[l-1] = '.'; label[l-2] = '.';
+    }
 
     int tw = tft.textWidth(label);
     int bw = tw + 12, bh = 24;
-    tft.fillRect(PAD, 8, 130, 24, COL_PANEL);
+    tft.fillRect(PAD, 8, 180, 24, COL_PANEL);
 
-    uint16_t badge_bg = (enabled == 0) ? COL_RED : bg;
+    int enabled = 0;
+    for (int i = 0; i < num_cats; i++) if (cat_enabled[i]) enabled++;
+    uint16_t badge_bg = (enabled == 0 && !cat_name) ? COL_RED : bg;
     tft.fillRoundRect(PAD, 8, bw, bh, 4, badge_bg);
     tft.setTextColor(COL_BG, badge_bg);
-    tft.drawString(label, PAD + 6, 12);
+    tft.drawString(label, PAD + 6, cat_name ? 10 : 12);
 }
 
 // WiFi icon — concentric arcs
@@ -672,10 +693,10 @@ static void draw_qcount() {
     tft.drawString(b, 380, 12);
 }
 
-// Full header bar
-static void draw_header() {
+// Full header bar. If cat_name is set, badge shows that category in bold.
+static void draw_header(const char* cat_name = nullptr) {
     tft.fillRect(0, 0, SCR_W, HDR_H, COL_PANEL);
-    draw_badge(COL_CYAN);
+    draw_badge(COL_CYAN, cat_name);
     draw_qcount();
     draw_wifi();
     draw_bat();
@@ -702,9 +723,9 @@ static const int CAT_COLS = 2, CAT_COL_GAP = 10, CAT_ROW_GAP = 6;
 static void calc_grid_layout() {
     int rows = (num_cats + CAT_COLS - 1) / CAT_COLS;
     cat_col_w = (USE_W - CAT_COL_GAP) / CAT_COLS;        // 223
-    int avail_h = CTN_H - 16;                              // 184
+    int avail_h = CTN_H - 12;                              // 188
     cat_row_h = (avail_h - (rows - 1) * CAT_ROW_GAP) / rows;
-    if (cat_row_h > 50) cat_row_h = 50;
+    if (cat_row_h > 42) cat_row_h = 42;                    // smaller max height
     int total_h = rows * cat_row_h + (rows - 1) * CAT_ROW_GAP;
     cat_start_y = CTN_Y + (CTN_H - total_h) / 2;
 }
@@ -732,7 +753,7 @@ static void draw_cat_button(int idx) {
     while (name[j] && j < 22) { label[j] = (j == 0) ? toupper(name[j]) : name[j]; j++; }
     label[j] = 0;
 
-    tft.setTextFont(2);
+    tft.setTextFont(4);
     tft.setTextDatum(MC_DATUM);
     tft.setTextColor(txt, bg);
     tft.drawString(label, x + cat_col_w / 2, y + cat_row_h / 2);
@@ -843,7 +864,7 @@ static void update_loading_dots() {
 }
 
 static void scr_question() {
-    draw_header();
+    draw_header(cur_q.category.c_str());
     clear_content();
     clear_action();
 
@@ -870,7 +891,7 @@ static void scr_answer() {
     tft.fillRect(0, CTN_Y, SCR_W, CTN_H, COL_GOLD);
     delay(80);
 
-    draw_header();
+    draw_header(cur_q.category.c_str());
     clear_content();
     clear_action();
 

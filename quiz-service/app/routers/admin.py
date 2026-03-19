@@ -395,13 +395,15 @@ async def update_config(request: Request):
     # Update pricing overrides
     set_overrides(new_config.pricing)
 
+    # Always update generator config (categories, difficulty, etc.)
+    state.generator.config = new_config
+
     # Rebuild LLM client if provider/model changed
     new_llm = new_config.llm.model_dump()
     if new_llm != old_llm:
         api_key = get_api_key(new_config.llm.api_key_env)
         state.llm_client = create_llm_client(new_config.llm, api_key)
         state.generator.llm_client = state.llm_client
-        state.generator.config = new_config
 
     # Rebuild TTS client if settings changed
     state.tts_client = PiperTTSClient(new_config.tts)
