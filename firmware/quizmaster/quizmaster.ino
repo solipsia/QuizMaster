@@ -158,8 +158,8 @@ static TaskHandle_t      audio_th       = NULL;
 static volatile bool     audio_playing  = false;
 static volatile bool     audio_stop     = false;
 
-// Volume (0–10, default 7 ≈ −3dB)
-static int volume_level = 7;
+// Volume (0–10, default 3 = 30%)
+static int volume_level = 3;
 
 // Config screen slider layout
 static const int SLD_X = 40, SLD_W = 400;
