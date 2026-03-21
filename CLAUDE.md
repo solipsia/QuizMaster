@@ -99,9 +99,10 @@ Both pages are single self-contained HTML files with inline CSS and JS. No build
 
 MCU is the ELEGOO ESP32 DevKitV1 (ESP32-WROOM-32, Xtensa dual-core, CP2102 USB-serial). Main application is `firmware/quizmaster/`. Test sketches also live in `firmware/`. Flash with arduino-cli:
 ```
-arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 firmware/<sketch>
-arduino-cli upload  --fqbn esp32:esp32:esp32doit-devkit-v1 --port COM21 firmware/<sketch>
+arduino-cli compile --fqbn "esp32:esp32:esp32:PartitionScheme=huge_app" firmware/quizmaster
+arduino-cli upload  --fqbn esp32:esp32:esp32 --port COM21 firmware/quizmaster
 ```
+The main firmware uses the generic ESP32 board with `huge_app` partition (3MB app, no OTA) to fit embedded SFX audio. Test sketches can use `esp32:esp32:esp32doit-devkit-v1` (default partitions).
 
 ### ESP32 DevKitV1 Pin Assignments
 
@@ -138,6 +139,29 @@ On the standard ESP32, GPIO numbers match directly — no D-pin mapping indirect
 - SPI clock: 27 MHz is the safe maximum for ILI9488 (40 MHz may cause artifacts).
 - **Touch Y-axis is inverted**: With rotation 1 (landscape), `tft.getTouch()` returns Y values flipped. Apply `ty = tft.height() - 1 - ty` after reading. Calibration data: `{ 300, 3600, 300, 3600, 3 }`.
 - **ILI9488 panel color inversion**: This ILI9488 panel has inherent color inversion — without `tft.invertDisplay(true)`, RGB565 colors display as their bitwise complement (e.g. red→cyan, gold→blue). The firmware calls `tft.invertDisplay(true)` once during the splash screen and leaves it active permanently, so all UI color constants (which use standard RGB values from the design spec) display correctly. Do NOT add `#define TFT_INVERSION_ON` globally — use the runtime `invertDisplay(true)` call instead.
+
+### Embedded Sound Effects (SFX)
+
+Short audio clips (UI sounds, jingles) are embedded in flash as PROGMEM C arrays — no filesystem or WiFi needed.
+
+**Files:**
+- `firmware/quizmaster/sfx/` — source `.wav` files and generated `.h` headers
+- `firmware/quizmaster/sfx/wav2header.py` — conversion script
+
+**Adding a new SFX clip:**
+1. Source WAV must be **22050 Hz, 16-bit, mono**. If not, convert it first (e.g. with Audacity or ffmpeg: `ffmpeg -i input.wav -ar 22050 -ac 1 -sample_fmt s16 output.wav`)
+2. Place the `.wav` in `firmware/quizmaster/sfx/`
+3. Run: `python wav2header.py newclip.wav` — generates `sfx_newclip.h`
+4. Add `#include "sfx/sfx_newclip.h"` to the top of `quizmaster.ino`
+5. Play with: `play_sfx(SFX_NEWCLIP, SFX_NEWCLIP_LEN)`
+
+**How it works:**
+- `play_sfx()` sends a command to the audio task (core 0) via FreeRTOS queue — same queue as streamed audio
+- `play_sfx_data()` reads PROGMEM in 4KB chunks, applies volume scaling, writes to I2S
+- The `AudioCmd` struct has a `type` field (`CMD_URL` for streamed audio, `CMD_SFX` for embedded)
+- `stop_audio()` works for both streamed and SFX playback
+
+**Budget:** With `huge_app` partition, ~1.8MB free for SFX data. At 22050 Hz mono 16-bit (~43 KB/s), that's ~40 seconds of total audio.
 
 ### I2S — use ESP-IDF 5.x API
 Use `driver/i2s_std.h` (same API as before):

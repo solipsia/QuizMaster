@@ -19,6 +19,8 @@
 #include "esp_sleep.h"
 #include "logo_bitmap.h"
 #include "qrcode.h"
+#include "sfx/sfx_welcome.h"
+#include "sfx/sfx_readytoanswer.h"
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Configuration
@@ -101,9 +103,14 @@ struct QuizQ {
     bool valid = false;
 };
 
-// Audio command: URL to stream
+// Audio command: URL to stream, or PROGMEM SFX to play
 #define AUDIO_URL_MAX 256
-struct AudioCmd { char url[AUDIO_URL_MAX]; };
+struct AudioCmd {
+    enum Type : uint8_t { CMD_URL, CMD_SFX } type;
+    char url[AUDIO_URL_MAX];            // CMD_URL
+    const uint8_t* sfx_data;            // CMD_SFX — PROGMEM pointer
+    size_t sfx_len;                     // CMD_SFX — byte count
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Categories (dynamic, fetched from service)
@@ -322,14 +329,38 @@ static void stream_audio(const char* url) {
     Serial.printf("[audio] done (remaining=%u)\n", remaining);
 }
 
-// Audio task on core 0 — receives URL, does HTTP + I2S streaming
+// Play PROGMEM SFX — reads flash in chunks, applies volume, writes to I2S
+static void play_sfx_data(const uint8_t* data, size_t len) {
+    digitalWrite(PIN_AMP_SD, HIGH);
+    delayMicroseconds(100);
+
+    uint8_t chunk[4096];
+    size_t off = 0;
+    while (off < len && !audio_stop) {
+        size_t n = min((size_t)sizeof(chunk), len - off);
+        memcpy_P(chunk, data + off, n);
+        apply_volume(chunk, n);
+        size_t wr;
+        i2s_channel_write(tx_handle, chunk, n, &wr, portMAX_DELAY);
+        off += n;
+    }
+
+    if (!audio_stop) delay(700);   // flush DMA tail
+    digitalWrite(PIN_AMP_SD, LOW);
+    Serial.printf("[sfx] done (%u bytes)\n", len);
+}
+
+// Audio task on core 0 — receives URL or SFX command
 static void audio_task(void*) {
     AudioCmd cmd;
     while (true) {
         if (xQueueReceive(audio_q, &cmd, portMAX_DELAY) == pdTRUE) {
             audio_playing = true;
             audio_stop    = false;
-            stream_audio(cmd.url);
+            if (cmd.type == AudioCmd::CMD_SFX)
+                play_sfx_data(cmd.sfx_data, cmd.sfx_len);
+            else
+                stream_audio(cmd.url);
             audio_playing = false;
         }
     }
@@ -337,7 +368,16 @@ static void audio_task(void*) {
 
 static void play_audio(const String& url) {
     AudioCmd cmd;
+    cmd.type = AudioCmd::CMD_URL;
     url.toCharArray(cmd.url, AUDIO_URL_MAX);
+    xQueueSend(audio_q, &cmd, 0);
+}
+
+static void play_sfx(const uint8_t* data, size_t len) {
+    AudioCmd cmd;
+    cmd.type     = AudioCmd::CMD_SFX;
+    cmd.sfx_data = data;
+    cmd.sfx_len  = len;
     xQueueSend(audio_q, &cmd, 0);
 }
 
@@ -924,8 +964,14 @@ static void scr_answer() {
     tft.fillRect(PAD, ty, USE_W, 2, COL_GOLD);
     ty += 8;
 
-    // Answer in green (24pt)
-    tft.setFreeFont(&FreeSans24pt7b);
+    // Answer in green — auto-size: 24pt → 18pt → 12pt to fit
+    int ans_avail = (ACT_Y - 4) - ty;
+    const GFXfont* ans_fonts[] = { &FreeSans24pt7b, &FreeSans18pt7b, &FreeSans12pt7b };
+    for (int i = 0; i < 3; i++) {
+        tft.setFreeFont(ans_fonts[i]);
+        int n = count_lines(cur_q.a_text.c_str(), USE_W);
+        if (n * (tft.fontHeight() + 2) <= ans_avail) break;
+    }
     draw_wrapped(cur_q.a_text.c_str(), PAD, ty, USE_W, ACT_Y - 4, COL_GREEN, COL_BG);
 
     // Split buttons: CATEGORY + NEXT QUESTION + REPLAY
@@ -1249,6 +1295,7 @@ static void do_fetch_and_show() {
         cur_screen = S_QUESTION;
         scr_question();
         play_audio(cur_q.q_audio);
+        play_sfx(SFX_READYTOANSWER, SFX_READYTOANSWER_LEN);
     } else {
         cur_error = (err != E_NONE) ? err : E_SERVICE;
         cur_screen = S_ERROR;
@@ -1305,6 +1352,7 @@ static void handle_touch() {
             // Replay question audio
             stop_audio();
             play_audio(cur_q.q_audio);
+            play_sfx(SFX_READYTOANSWER, SFX_READYTOANSWER_LEN);
         } else if (in_action) {
             // Reveal answer
             stop_audio();
@@ -1481,20 +1529,15 @@ void setup() {
     cur_screen = S_SPLASH;
     scr_splash();
 
-    // Start WiFi during splash — play welcome audio as soon as connected
+    // Play welcome SFX immediately (no WiFi needed) + connect WiFi in parallel
+    play_sfx(SFX_WELCOME, SFX_WELCOME_LEN);
     WiFi.setAutoReconnect(true);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    String welcome_wav = String(SERVICE_BASE) + "/audio/welcome.wav";
-    bool welcome_started = false;
     uint32_t t0 = millis();
     while (millis() - t0 < SPLASH_HOLD_MS || audio_playing) {
         if (WiFi.status() == WL_CONNECTED && !wifi_up) {
             wifi_up = true;
             Serial.printf("WiFi OK: %s\n", WiFi.localIP().toString().c_str());
-        }
-        if (wifi_up && !welcome_started) {
-            welcome_started = true;
-            play_audio(welcome_wav);
         }
         if (millis() - t0 > 8000) break;   // hard cap
         delay(50);

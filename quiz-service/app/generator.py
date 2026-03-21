@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import json
+import logging
 import random
 import time
 import uuid
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
+
+_RECENT_QUESTIONS_MAX = 50
+_RECENT_QUESTIONS_FILE = "recent_questions.json"
+
+logger = logging.getLogger(__name__)
 
 from .config import get_api_key
 from .llm.base import LLMClient
@@ -27,6 +35,24 @@ class QuestionGenerator:
         self.tts_client = tts_client
         self.metrics = metrics
         self.audio_dir = audio_dir
+        self._recent: deque[str] = deque(maxlen=_RECENT_QUESTIONS_MAX)
+        self._recent_path = audio_dir.parent / _RECENT_QUESTIONS_FILE
+        self._load_recent()
+
+    def _load_recent(self) -> None:
+        try:
+            data = json.loads(self._recent_path.read_text())
+            for q in data[-_RECENT_QUESTIONS_MAX:]:
+                self._recent.append(q)
+            logger.info("Loaded %d recent questions from %s", len(self._recent), self._recent_path)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+
+    def _save_recent(self) -> None:
+        try:
+            self._recent_path.write_text(json.dumps(list(self._recent)))
+        except OSError as e:
+            logger.warning("Failed to save recent questions: %s", e)
 
     async def generate_one(self, category: str | None = None) -> QuizQuestion:
         total_start = time.time()
@@ -38,10 +64,17 @@ class QuestionGenerator:
                 enabled = self.config.quiz.categories
             category = random.choice(enabled)
 
-        # Build prompt
+        # Build prompt with recent-question exclusion list
         prompt = self.config.quiz.system_prompt.replace(
             "{{category}}", category
         ).replace("{{difficulty}}", self.config.quiz.difficulty)
+
+        if self._recent:
+            recent_list = "\n".join(f"- {q}" for q in self._recent)
+            prompt += (
+                "\n\nDo NOT repeat any of these recently asked questions — "
+                "generate something completely different:\n" + recent_list
+            )
 
         # Call LLM
         llm_start = time.time()
@@ -62,6 +95,10 @@ class QuestionGenerator:
                 input_tokens=usage.get("input_tokens", 0),
                 output_tokens=usage.get("output_tokens", 0),
             )
+
+        # Track to avoid repeats
+        self._recent.append(qa["question"])
+        self._save_recent()
 
         # Generate unique ID
         qid = uuid.uuid4().hex[:6]
