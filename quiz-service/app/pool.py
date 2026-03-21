@@ -54,6 +54,12 @@ class QuestionPool:
         async with self._lock:
             return len(self._questions) < config.pool.target_size
 
+    async def missing_categories(self, categories: list[str]) -> list[str]:
+        """Return enabled categories that have zero questions in the pool."""
+        async with self._lock:
+            present = {q.category for q in self._questions}
+            return [c for c in categories if c not in present]
+
     def _delete_audio(self, q: QuizQuestion) -> None:
         for suffix in ("_q.wav", "_a.wav"):
             path = self._audio_dir / f"{q.id}{suffix}"

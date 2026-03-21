@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import re
 from datetime import datetime, timezone
 
@@ -94,11 +95,20 @@ class BackfillWorker:
                     continue
 
                 config = self.config_ref[0]
-                if await self.pool.is_below_target(config):
+                enabled = [c for c in config.quiz.categories
+                           if c not in config.quiz.disabled_categories]
+                if not enabled:
+                    enabled = config.quiz.categories
+                missing = await self.pool.missing_categories(enabled)
+                below_target = await self.pool.is_below_target(config)
+
+                if below_target or missing:
                     self._generating = True
                     self._backoff = 2
+                    # Prioritize categories that have zero questions
+                    category = random.choice(missing) if missing else None
                     try:
-                        q = await self.generator.generate_one()
+                        q = await self.generator.generate_one(category)
                         await self.pool.add(q)
                         self.request_log.add(LogEntry(
                             timestamp=datetime.now(timezone.utc).isoformat(),
