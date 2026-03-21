@@ -1379,6 +1379,7 @@ static void handle_touch() {
                 cur_screen = S_QUESTION;
                 scr_question();
                 play_audio(cur_q.q_audio);
+                play_sfx(SFX_READYTOANSWER, SFX_READYTOANSWER_LEN);
                 pre_started = false;
             } else {
                 do_fetch_and_show();

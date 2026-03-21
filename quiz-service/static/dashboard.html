@@ -953,6 +953,27 @@ audio::-webkit-media-controls-panel { border-radius: 4px; }
     </div>
   </div>
 
+  <!-- RECENT QUESTIONS (dedup history) -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Recent Questions</span>
+      <span style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-dim);" id="recentCount">0 questions</span>
+    </div>
+    <div class="table-wrap" style="max-height:400px;overflow-y:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:3rem;">#</th>
+            <th>Question</th>
+          </tr>
+        </thead>
+        <tbody id="recentBody">
+          <tr><td colspan="2" style="color:var(--text-dim);text-align:center;padding:20px;">No recent questions</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </main>
 
 <!-- TOAST CONTAINER -->
@@ -1027,14 +1048,16 @@ function stopPolling() {
 // ─── POLLING ───
 async function poll() {
   try {
-    const [statusRes, queueRes, logRes] = await Promise.all([
+    const [statusRes, queueRes, logRes, recentRes] = await Promise.all([
       fetch('/api/admin/status'),
       fetch('/api/admin/queue'),
-      fetch('/api/admin/log?limit=50')
+      fetch('/api/admin/log?limit=50'),
+      fetch('/api/admin/recent')
     ]);
     if (statusRes.ok) renderStatus(await statusRes.json());
     if (queueRes.ok) renderQueue(await queueRes.json());
     if (logRes.ok) renderLog(await logRes.json());
+    if (recentRes.ok) renderRecent(await recentRes.json());
   } catch (e) {
     document.getElementById('healthDot').classList.add('error');
   }
@@ -1411,6 +1434,28 @@ async function flushQueue() {
   } catch (e) {
     toast('Network error', 'error');
   }
+}
+
+// ─── RECENT QUESTIONS ───
+function renderRecent(questions) {
+  document.getElementById('recentCount').textContent = questions.length + ' question' + (questions.length !== 1 ? 's' : '');
+  const tbody = document.getElementById('recentBody');
+  if (!questions.length) {
+    tbody.innerHTML = '<tr><td colspan="2" style="color:var(--text-dim);text-align:center;padding:20px;">No recent questions</td></tr>';
+    return;
+  }
+  tbody.innerHTML = '';
+  questions.slice().reverse().forEach((q, i) => {
+    const tr = document.createElement('tr');
+    const tdNum = document.createElement('td');
+    tdNum.style.color = 'var(--text-dim)';
+    tdNum.textContent = questions.length - i;
+    const tdQ = document.createElement('td');
+    tdQ.textContent = q;
+    tr.appendChild(tdNum);
+    tr.appendChild(tdQ);
+    tbody.appendChild(tr);
+  });
 }
 
 // ─── INIT ───

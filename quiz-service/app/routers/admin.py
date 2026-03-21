@@ -319,6 +319,12 @@ async def flush_queue(request: Request):
     return {"status": "flushed"}
 
 
+@router.get("/api/admin/recent")
+async def get_recent(request: Request):
+    generator = request.app.state.generator
+    return list(generator._recent)
+
+
 @router.get("/api/admin/config")
 async def get_config(request: Request):
     config = request.app.state.config_ref[0]
